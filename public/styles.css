@@ -210,8 +210,10 @@ button.tiny { padding: 2px 8px; font-size: 11px; }
 .badge.nocount  { background: rgba(176,42,55,.14);  color: var(--bad); }
 .badge.level    { background: rgba(107,114,128,.16); color: var(--muted); }
 /* Rules 4-7 are caps, not requirements: the course counts toward the 9 but
-   satisfies nothing, so it stays neutral instead of reading as a green pass. */
-.badge.cap      { background: rgba(107,114,128,.16); color: var(--muted); }
+   satisfies nothing, so it stays neutral instead of reading as a green pass.
+   Named "capped", not "cap" -- .cap is already the stat tile in .capgrid,
+   and being later in the file it would override .badge padding/font-size. */
+.badge.capped   { background: rgba(107,114,128,.16); color: var(--muted); }
 @media (prefers-color-scheme: dark) { .badge.reqmaybe { color: #e0a83c; } }
 .warns { margin-top: 6px; font-size: 11.5px; color: #8a5a00; }
 @media (prefers-color-scheme: dark) { .warns { color: #e0b070; } }

@@ -463,7 +463,7 @@ function policyBadges(pol) {
       // requirement. Driven off `kind` rather than an id list so a new rule in
       // mde_policy.yaml is styled correctly without touching this.
       const isCap = r.kind === "maximum";
-      const cls = isCap ? "cap" : (v.verdict === "yes" ? "req" : "reqmaybe");
+      const cls = isCap ? "capped" : (v.verdict === "yes" ? "req" : "reqmaybe");
       const label = esc(r.name || v.requirement_id)
         + (isCap && r.max_courses ? ` \u00b7 max ${r.max_courses}` : "")
         + (v.verdict === "verify" ? " ?" : "");
