@@ -36,11 +36,12 @@ const CALENDAR_URL = "https://my.harvard.edu/calendar/load/";
 const state = {
   meta: null, policy: null,
   results: [], locked: [], plan: new Map(), hiddenTba: 0,
-  preview: null, offset: 0, limit: 100, total: 0,
+  preview: [], offset: 0, limit: 100, total: 0,
   electivesThisTerm: 2,
   extension: false,        // set true when the extension announces itself
   slots: [],               // per-slot combination filters
   comboOffset: 0, comboLimit: 20, comboTotal: 0, comboRan: false,
+  comboPage: [],           // the combinations currently on screen
 };
 
 const fmt = (m) => {
@@ -562,8 +563,8 @@ function wireCards(sel, source) {
   $$(`${sel} li`).forEach((li) => {
     const c = source.find((r) => r.key === li.dataset.key);
     if (!c) return;
-    li.addEventListener("mouseenter", () => { state.preview = c; renderGrid(); });
-    li.addEventListener("mouseleave", () => { state.preview = null; renderGrid(); });
+    li.addEventListener("mouseenter", () => { setPreview([c]); });
+    li.addEventListener("mouseleave", () => { setPreview([]); });
   });
   $$(`${sel} [data-plan]`).forEach((b) => b.addEventListener("click", async (e) => {
     e.stopPropagation();
@@ -577,6 +578,9 @@ async function togglePlan(key) {
   Store.togglePlan(term(), key);
   await loadPlan();           // updates state.plan first...
   await refreshResults();     // ...so the re-render reads the new membership
+  // A combination's button reflects plan membership, so adding one of its
+  // courses from elsewhere has to update it.
+  if (state.comboPage.length) renderCombos();
   renderGrid();
 }
 
@@ -675,6 +679,12 @@ function setDrawer(open) {
   // The grid measures itself for click-to-create, and getBoundingClientRect
   // returns zeroes while the pane is off-screen -- so redraw once it is up.
   if (open) renderGrid();
+}
+
+/** Show these courses as blue preview blocks. Empty clears the preview. */
+function setPreview(courses) {
+  state.preview = (courses || []).filter(Boolean);
+  renderGrid();
 }
 
 function renderScheduleCount() {
@@ -853,10 +863,12 @@ function renderGrid() {
   };
 
   for (const it of items) draw(it, it.kind === "locked" ? "ev-locked" : "ev-pinned");
-  if (state.preview && !state.plan.has(state.preview.key)) {
-    draw({ label: `${state.preview.subject} ${state.preview.catalog}`,
-           url: courseUrl(state.preview), meetings: state.preview.meetings,
-           removeAttr: "", detail: "" }, "ev-preview");
+  // Anything already in the plan is drawn purple above; previewing it again in
+  // blue would paint over it and misrepresent it.
+  for (const pv of state.preview) {
+    if (!pv || state.plan.has(pv.key)) continue;
+    draw({ label: `${pv.subject} ${pv.catalog}`, url: courseUrl(pv),
+           meetings: pv.meetings, removeAttr: "", detail: "" }, "ev-preview");
   }
 
   wireGridRemoval();
@@ -993,6 +1005,76 @@ function renderSlotCards(poolSizes = null) {
   });
 }
 
+/** Is every course of this combination already in the plan? */
+const comboInPlan = (combo) => combo.every((c) => Store.inPlan(term(), c.key));
+
+function renderCombos() {
+  const box = $("#combos");
+  box.innerHTML = state.comboPage.map((combo, i) => {
+    const inPlan = comboInPlan(combo);
+    return `
+      <div class="combo" data-combo="${i}">
+        <div class="combo-head">
+          <h4>Option ${state.comboOffset + i + 1}</h4>
+          <button class="ghost tiny ${inPlan ? "danger" : "addcombo"}" data-combo-plan="${i}">
+            ${inPlan ? "Remove from plan" : "Add all to plan"}</button>
+        </div>
+        ${combo.map((c, si) => `<div class="row">
+          <span class="slotno">${si + 1}</span>
+          ${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")} ${extLink(c, esc(c.title))}
+          <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
+            m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
+            fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
+          ${policyBadges(c.policy)}
+        </div>`).join("")}
+      </div>`;
+  }).join("");
+
+  // Hovering an option previews the whole set, so you can see the shape of the
+  // week it produces rather than one course at a time.
+  $$("#combos .combo").forEach((el) => {
+    const combo = state.comboPage[Number(el.dataset.combo)];
+    el.addEventListener("mouseenter", () => setPreview(combo));
+    el.addEventListener("mouseleave", () => setPreview([]));
+  });
+
+  $$("#combos [data-combo-plan]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await toggleComboInPlan(state.comboPage[Number(b.dataset.comboPlan)]);
+    }));
+}
+
+/** Add or remove every course of a combination at once.
+ *
+ * Adding is a union rather than a replacement: nothing the student already
+ * chose is silently discarded. The plan report is what tells them if the total
+ * now exceeds the term's elective count -- guessing here would either destroy
+ * work or hide the overflow.
+ */
+async function toggleComboInPlan(combo) {
+  if (!combo) return;
+  const t = term();
+  const removing = comboInPlan(combo);
+  let n = 0;
+  for (const c of combo) {
+    if (removing === Store.inPlan(t, c.key)) { Store.togglePlan(t, c.key); n++; }
+  }
+  setPreview([]);
+  await loadPlan();
+  renderCombos();
+  await refreshResults();
+
+  const total = Store.plan(t).length;
+  const want = state.electivesThisTerm;
+  toast(removing
+    ? `Removed ${n} course${n === 1 ? "" : "s"}. Plan now has ${total}.`
+    : `Added ${n} course${n === 1 ? "" : "s"}. Plan now has ${total} of ${want} ` +
+      `elective${want === 1 ? "" : "s"} for this term.` +
+      (total > want ? " That's more than this term needs — check My plan." : ""),
+    !removing && total > want ? "warn" : "ok");
+}
+
 let comboTimer;
 const debouncedCombos = () => {
   clearTimeout(comboTimer);
@@ -1034,18 +1116,8 @@ async function findCombos(resetPage = true) {
       d.slots.map((s) => `${s.pool_size.toLocaleString()}`).join(" × ") + " candidates" +
       (d.truncated ? ` — stopped counting at ${d.total.toLocaleString()}; narrow a slot to see them all.` : "");
 
-    box.innerHTML = d.combinations.map((combo, i) => `
-      <div class="combo">
-        <h4>Option ${state.comboOffset + i + 1}</h4>
-        ${combo.map((c, si) => `<div class="row">
-          <span class="slotno">${si + 1}</span>
-          ${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")} ${extLink(c, esc(c.title))}
-          <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
-            m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
-            fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
-          ${policyBadges(c.policy)}
-        </div>`).join("")}
-      </div>`).join("");
+    state.comboPage = d.combinations;
+    renderCombos();
 
     const from = state.comboOffset + 1;
     const to = state.comboOffset + d.combinations.length;

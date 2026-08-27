@@ -605,3 +605,12 @@ body.drawer-open { overflow: hidden; }
                     color: var(--muted); }
 .movedbox summary:hover { color: var(--ink); }
 .movedbox .change-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
+
+/* ---- combination options: hover to preview, one button to take the set ---- */
+.combo { transition: border-color .12s, background .12s; }
+.combo:hover { border-color: var(--preview); background: rgba(37,99,235,.05); }
+.combo-head { display: flex; align-items: center; justify-content: space-between;
+              gap: 10px; margin-bottom: 6px; }
+.combo-head h4 { margin: 0; }
+button.addcombo { border-color: rgba(37,99,235,.5); color: var(--preview); }
+button.addcombo:hover { border-color: var(--preview); background: rgba(37,99,235,.1); }
