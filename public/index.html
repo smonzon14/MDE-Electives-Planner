@@ -56,10 +56,10 @@
   </div>
 </div>
 
-<main class="single">
+<main class="layout">
+ <div class="main-col">
   <nav class="tabs">
-    <button class="tab active" data-tab="grid">My schedule</button>
-    <button class="tab" data-tab="list">Course search</button>
+    <button class="tab active" data-tab="list">Course search</button>
     <button class="tab" data-tab="combos">Combinations</button>
     <button class="tab" data-tab="plan">My plan <span id="planCount" class="pill">0</span></button>
   </nav>
@@ -92,28 +92,7 @@
     </div>
   </div>
 
-  <div id="tab-grid" class="tabpanel active">
-    <div class="gridhead">
-      <p class="hint">Your enrolled classes and anything you've added. Click an
-        empty slot to add a block; hit <b>×</b> on a block to remove it.</p>
-    </div>
-    <div class="grid-wrap">
-      <div id="weekGrid" class="week-grid"></div>
-      <button id="gridAddBlock" class="fab" title="Add a block by hand">+ Block</button>
-    </div>
-    <p class="hint legend">
-      <span class="chip locked"></span> locked
-      <span class="chip preview"></span> preview (hover a course)
-      <span class="chip pinned"></span> in my plan
-    </p>
-    <div id="lockedOverflow" class="overflow" hidden></div>
-
-    <h3 class="sec">Times that moved recently</h3>
-    <p class="hint">Meeting times change daily during shopping week.</p>
-    <ul id="changeList" class="change-list wide"></ul>
-  </div>
-
-  <div id="tab-list" class="tabpanel">
+  <div id="tab-list" class="tabpanel active">
     <div class="result-head">
       <span id="resultCount">—</span>
       <button id="loadMore" class="ghost" hidden>Load more</button>
@@ -172,7 +151,40 @@
       <button id="resetBtn" class="ghost tiny danger">Clear</button>
     </div>
   </div>
+ </div><!-- /.main-col -->
+
+ <!-- Always-visible companion pane on wide screens; a slide-out drawer below
+      the breakpoint. Same DOM either way, so the calendar has one code path. -->
+ <div id="scheduleScrim" class="scrim" hidden></div>
+ <aside id="schedulePane" class="schedpane" aria-label="My schedule">
+   <div class="sp-head">
+     <h2>My schedule</h2>
+     <button id="scheduleClose" class="ghost tiny sp-close" aria-label="Close schedule">✕</button>
+   </div>
+   <p class="hint">Click an empty slot to add a block; hit <b>×</b> on a block
+     to remove it.</p>
+   <div class="grid-wrap">
+     <div id="weekGrid" class="week-grid"></div>
+     <button id="gridAddBlock" class="fab" title="Add a block by hand">+ Block</button>
+   </div>
+   <p class="hint legend">
+     <span class="chip locked"></span> locked
+     <span class="chip preview"></span> preview
+     <span class="chip pinned"></span> in my plan
+   </p>
+   <div id="lockedOverflow" class="overflow" hidden></div>
+
+   <h3 class="sec">Times that moved recently</h3>
+   <p class="hint">Meeting times change daily during shopping week.</p>
+   <ul id="changeList" class="change-list"></ul>
+ </aside>
 </main>
+
+<!-- Narrow screens only: the calendar is one tap away from every tab. -->
+<button id="scheduleToggle" class="schedfab" aria-expanded="false"
+        aria-controls="schedulePane">
+  <span>My schedule</span><span id="scheduleCount" class="schedcount">0</span>
+</button>
 
 <!-- First-run welcome. Opens on load until a schedule has been imported;
      dismissible, with the #firstRun banner left behind as the standing

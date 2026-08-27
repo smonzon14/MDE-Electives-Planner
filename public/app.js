@@ -646,6 +646,38 @@ function renderReport(r) {
     </div>`;
 }
 
+// ---------------------------------------------------------- schedule pane ---
+//
+// One DOM, two presentations: a sticky companion column when there is room,
+// and a slide-out drawer when there isn't. The drawer is the only mode that
+// needs state, since the wide layout is always visible.
+
+// Read from CSS so the breakpoint lives in one place. Media queries cannot use
+// custom properties, so styles.css still repeats the number in its @media --
+// but at least JS can never disagree with it.
+const DRAWER_MAX = parseInt(
+  getComputedStyle(document.documentElement).getPropertyValue("--drawer-max"), 10) || 1380;
+
+const drawerQuery = window.matchMedia(`(max-width: ${DRAWER_MAX}px)`);
+const drawerMode = () => drawerQuery.matches;
+
+function setDrawer(open) {
+  if (!drawerMode()) return;
+  $("#schedulePane").classList.toggle("open", open);
+  $("#scheduleScrim").hidden = !open;
+  $("#scheduleToggle").setAttribute("aria-expanded", String(open));
+  document.body.classList.toggle("drawer-open", open);
+  // The grid measures itself for click-to-create, and getBoundingClientRect
+  // returns zeroes while the pane is off-screen -- so redraw once it is up.
+  if (open) renderGrid();
+}
+
+function renderScheduleCount() {
+  const n = state.locked.length +
+            [...state.plan.values()].filter((c) => !c.enrolled).length;
+  $("#scheduleCount").textContent = String(n);
+}
+
 // ------------------------------------------------------------- week grid ---
 
 /** Everything drawn on the grid, with what removing it should do. */
@@ -715,10 +747,13 @@ function renderGrid() {
     el.style.top = `${(Math.max(start, dayStart) - dayStart) * PX_PER_MIN}px`;
     el.style.height = `${Math.max(18,
       (Math.min(end, dayEnd) - Math.max(start, dayStart)) * PX_PER_MIN)}px`;
+    // In a ~70px-wide side-pane column the title wraps or clips, so the full
+    // text has to be recoverable on hover.
+    const full = `${title} · ${sub.replace(/<[^>]*>/g, " ")}${detail ? ` · ${detail}` : ""}`;
     const inner = url
       ? `<a class="ev-body ev-link" href="${esc(url)}" target="_blank"
-            rel="noopener noreferrer" title="Open on my.harvard">`
-      : `<span class="ev-body">`;
+            rel="noopener noreferrer" title="${esc(full)} — open on my.harvard">`
+      : `<span class="ev-body" title="${esc(full)}">`;
     el.innerHTML = inner +
       `<b>${esc(title)}</b><small>${sub}${detail ? `<br>${esc(detail)}` : ""}</small>` +
       (url ? `</a>` : `</span>`) +
@@ -748,6 +783,7 @@ function renderGrid() {
   wireGridRemoval();
   wireGridCreate();
   renderLockedOverflow(items);
+  renderScheduleCount();
 }
 
 function wireGridRemoval() {
@@ -1236,6 +1272,20 @@ $("#editProfile").addEventListener("click", openProfile);
 $("#cancelProfile").addEventListener("click", () => { $("#profileModal").hidden = true; });
 $("#saveProfile").addEventListener("click", saveProfile);
 $("#gridAddBlock").addEventListener("click", () => openBlock());
+$("#scheduleToggle").addEventListener("click", () =>
+  setDrawer(!$("#schedulePane").classList.contains("open")));
+$("#scheduleClose").addEventListener("click", () => setDrawer(false));
+$("#scheduleScrim").addEventListener("click", () => setDrawer(false));
+// Crossing the breakpoint with the drawer open would leave the scrim and the
+// body scroll-lock stranded over a layout that no longer has a drawer.
+drawerQuery.addEventListener("change", (e) => {
+  if (!e.matches) {
+    $("#schedulePane").classList.remove("open");
+    $("#scheduleScrim").hidden = true;
+    document.body.classList.remove("drawer-open");
+  }
+  renderGrid();
+});
 $("#fbProfile").addEventListener("click", openProfile);
 $("#cancelBlock").addEventListener("click", () => { $("#blockModal").hidden = true; });
 $("#saveBlock").addEventListener("click", saveBlock);
@@ -1292,7 +1342,11 @@ $$(".modal").forEach((m) => m.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!$("#welcomeModal").hidden) dismissWelcome();
+  const anyModal = $$(".modal").some((m) => !m.hidden);
   $$(".modal").forEach((m) => { m.hidden = true; });
+  // Escape closes the topmost thing only: a modal opened from the drawer
+  // should not also dismiss the drawer underneath it.
+  if (!anyModal) setDrawer(false);
   metaPinned = false;
   toggleMeta(false);
 });
@@ -1319,7 +1373,6 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => {
   t.classList.add("active");
   $(`#tab-${t.dataset.tab}`).classList.add("active");
   renderFilterBarVisibility();
-  if (t.dataset.tab === "grid") renderGrid();
   if (t.dataset.tab === "combos" && !$("#slotCards").children.length) renderSlotCards();
 }));
 renderFilterBarVisibility();
