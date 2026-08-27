@@ -316,10 +316,12 @@ def search(inp: SearchIn):
             plan_blocks.append((pc["key"], b))
 
     results = []
+    # Courses hidden ONLY because they have no published meeting time. Counted
+    # so the UI can say so: a whole school can be untimed early in a cycle (GSD
+    # had 153 Spring 2027 sections and no times), and silently showing zero
+    # results invites the conclusion that nothing is offered.
+    hidden_tba = 0
     for c in courses:
-        if not inp.include_tba and not c["meetings"]:
-            continue
-
         el = POLICY.evaluate(c, profile, xl.get(c["key"]))
         if inp.project_based and not el.is_project_based:
             continue
@@ -330,6 +332,10 @@ def search(inp: SearchIn):
             if inp.requirement not in satisfied:
                 continue
         elif not satisfied and not inp.include_no_credit:
+            continue
+
+        if not c["meetings"] and not inp.include_tba:
+            hidden_tba += 1
             continue
 
         blocks = _blocks(c["meetings"], c["title"])
@@ -362,6 +368,7 @@ def search(inp: SearchIn):
     return {"total": len(results), "offset": inp.offset, "limit": inp.limit,
             "profile": profile.to_dict(),
             "electives_this_term": POLICY.electives_this_term(profile),
+            "hidden_tba": hidden_tba,
             "results": results[inp.offset : inp.offset + inp.limit]}
 
 

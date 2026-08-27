@@ -387,3 +387,9 @@ button.danger:hover { border-color: var(--bad); }
               background: rgba(180,120,0,.1); border: 1px solid rgba(180,120,0,.4);
               font-size: 11.5px; line-height: 1.45; color: var(--ink); }
 .seasonwarn button { margin-top: 6px; }
+
+/* ---- "N courses have no published meeting time" ---- */
+.tbanote { margin: 0 0 10px; padding: 8px 11px; border-radius: 8px;
+           background: rgba(37,99,235,.09); border: 1px solid rgba(37,99,235,.3);
+           font-size: 12px; line-height: 1.5; color: var(--muted); }
+.tbanote button { margin-left: 6px; vertical-align: 1px; }
