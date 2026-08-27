@@ -652,3 +652,9 @@ button.addcombo:hover { border-color: var(--preview); background: rgba(37,99,235
 .bgempty { font-size: 12.5px; line-height: 1.5; color: var(--muted);
            padding: 9px 11px; border: 1px dashed var(--line); border-radius: 8px; }
 .bgempty b { color: var(--ink); }
+
+/* .rep carries only a bottom margin, so the requirement check sat flush against
+   the background strip above it. Space it from the container instead of adding
+   a top margin to .rep, which would also affect stacked report blocks. */
+#planReport { margin-top: 14px; }
+#planReport:empty { margin-top: 0; }
