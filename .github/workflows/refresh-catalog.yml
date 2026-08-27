@@ -68,6 +68,29 @@ jobs:
       - name: Install ingest dependencies
         run: pip install -r requirements-ingest.txt
 
+      # The catalog is no longer in the repo, so the checkout starts with no
+      # database. Fetch the current one first: ingest.crawl diffs meeting
+      # patterns against what is already stored to populate the `changes`
+      # table, which is what powers the "recently moved" feed during shopping
+      # week. Building from scratch every run would leave that feed
+      # permanently empty -- and silently, since the crawl itself succeeds.
+      - name: Seed the runner with the current catalog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p data
+          if gh release download catalog --pattern courses.db --dir data --clobber 2>/dev/null; then
+            python - <<'PY'
+          import sqlite3
+          c = sqlite3.connect("data/courses.db")
+          n = c.execute("select count(*) from courses").fetchone()[0]
+          terms = [r[0] for r in c.execute("select distinct term from courses order by term")]
+          print(f"Seeded from the release asset: {n:,} sections across {terms}")
+          PY
+          else
+            echo "::notice::No existing catalog asset. Building from scratch; the changes feed will be empty for this run."
+          fi
+
       # One pass per term: crawl, then backfill dates, then detect cross-listings.
       # Cross-listing detection is per-term by nature (it groups courses sharing
       # an instructor and meeting time), so it cannot be hoisted out of the loop.
@@ -147,7 +170,17 @@ jobs:
       # bills a separate bandwidth quota per checkout, and Vercel does not
       # fetch LFS objects at all -- the build would ship the ~130-byte pointer
       # file and SQLite would report the catalog as corrupt.
+      # Guard: --max-pages produces a deliberately partial catalog. Publishing
+      # it would overwrite the real asset with a fraction of the sections, and
+      # since the asset is the only copy there would be nothing to roll back to.
+      - name: Refuse to publish a partial catalog
+        if: ${{ inputs.max_pages != '' }}
+        run: |
+          echo "::warning::max_pages was set, so this run crawled only part of the catalog."
+          echo "::warning::The release asset was NOT replaced and no deploy was triggered."
+
       - name: Publish the catalog as a release asset
+        if: ${{ inputs.max_pages == '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -211,7 +244,7 @@ jobs:
       # served. Set the VERCEL_DEPLOY_HOOK secret to a Vercel Deploy Hook URL.
       # `if: always()` so a failed approved-lists push still ships the catalog.
       - name: Trigger the Vercel deploy
-        if: always()
+        if: ${{ always() && inputs.max_pages == '' }}
         env:
           HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |
