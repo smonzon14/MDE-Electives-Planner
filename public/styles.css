@@ -393,3 +393,22 @@ button.danger:hover { border-color: var(--bad); }
            background: rgba(37,99,235,.09); border: 1px solid rgba(37,99,235,.3);
            font-size: 12px; line-height: 1.5; color: var(--muted); }
 .tbanote button { margin-left: 6px; vertical-align: 1px; }
+
+/* ---- extension install card ---- */
+.extbadge { margin-left: 8px; padding: 1px 7px; border-radius: 10px;
+            background: rgba(21,115,71,.15); color: var(--ok);
+            font-size: 10px; font-weight: 600; letter-spacing: .02em;
+            text-transform: none; vertical-align: 1px; }
+@media (prefers-color-scheme: dark) { .extbadge { color: #46b47c; } }
+
+.dlbtn { display: inline-flex; align-items: baseline; gap: 8px;
+         padding: 7px 13px; border-radius: 8px; text-decoration: none;
+         background: var(--crimson); color: #fff; font-size: 13px; font-weight: 600; }
+.dlbtn:hover { filter: brightness(1.08); }
+.dlsize { font-size: 11px; font-weight: 400; opacity: .8; }
+
+.steps.tight { margin-top: 10px; margin-bottom: 6px; }
+.steps code { font-size: 11.5px; padding: 1px 5px; border-radius: 4px;
+              background: rgba(128,128,128,.16); font-family: ui-monospace,
+              SFMono-Regular, Menlo, monospace; }
+.hint.fine { font-size: 11.5px; opacity: .85; }

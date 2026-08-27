@@ -204,11 +204,33 @@
       site; only class titles, codes and meeting times do.</p>
 
     <div class="imp-route">
-      <h3>One click</h3>
+      <h3>One click <span id="impExtBadge" class="extbadge" hidden>extension detected</span></h3>
+
       <button id="impOneClick" class="primary" hidden>Import with the extension</button>
-      <p class="hint" id="impNoExt">The browser extension isn't installed or
-        isn't active on this page. Use the copy-paste route below — it works
-        everywhere, including Safari and Firefox, and needs no install.</p>
+
+      <div id="impInstall">
+        <p class="hint">The extension isn't installed on this browser. It's
+          optional — the copy-paste route below needs no install and works
+          everywhere. But if you'll be re-importing as your schedule changes,
+          one click beats pasting.</p>
+        <a id="impDownload" class="dlbtn" href="/api/extension.zip"
+           download="mde-electives-planner-extension.zip">
+          Download the extension <span class="dlsize">Chrome / Edge · ~5 KB</span>
+        </a>
+        <ol class="steps tight">
+          <li>Unzip the download.</li>
+          <li>Open <code class="copyable">chrome://extensions</code>
+              (paste it in the address bar — Chrome blocks links to it)
+              and turn on <b>Developer mode</b>, top right.</li>
+          <li>Click <b>Load unpacked</b> and pick the unzipped
+              <code>mde-electives-planner</code> folder.</li>
+          <li>Sign in to my.harvard, then reload this page.</li>
+        </ol>
+        <p class="hint fine">It asks for access to <code>my.harvard.edu</code>
+          only. It reads that one calendar endpoint using the session you're
+          already signed into and hands the result to this page — it has no
+          server of its own and stores nothing.</p>
+      </div>
     </div>
 
     <div class="imp-route">

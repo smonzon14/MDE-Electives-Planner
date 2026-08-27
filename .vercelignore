@@ -7,7 +7,9 @@ __pycache__/
 *.pyc
 .git/
 .github/
-extension/
+# extension/ IS bundled: /api/extension.zip packages it on demand so the
+# download can never drift from the source, and so the manifest can be pointed
+# at whatever origin is serving it.
 *.xlsx
 ~$*
 data/*.log

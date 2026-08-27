@@ -747,9 +747,15 @@ function openImport() {
   $("#impError").hidden = true;
   $("#impResult").hidden = true;
   $("#impUrl").textContent = CALENDAR_URL;
-  $("#impOneClick").hidden = !state.extension;
-  $("#impNoExt").hidden = state.extension;
+  renderExtState();
   $("#importModal").hidden = false;
+}
+
+/** Show either the one-click button or the install instructions, never both. */
+function renderExtState() {
+  $("#impOneClick").hidden = !state.extension;
+  $("#impInstall").hidden = state.extension;
+  $("#impExtBadge").hidden = !state.extension;
 }
 
 function impError(msg) {
@@ -857,8 +863,7 @@ window.addEventListener("message", (ev) => {
   if (ev.source !== window) return;
   if (ev.data?.source === "mde-extension" && ev.data.type === "MDE_EXT_READY") {
     state.extension = true;
-    $("#impOneClick").hidden = false;
-    $("#impNoExt").hidden = true;
+    renderExtState();
   }
 });
 

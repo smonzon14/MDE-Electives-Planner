@@ -26,22 +26,42 @@ window.addEventListener("message", (ev) => {
   if (msg.type === "MDE_EXT_PING") return announce();
   if (msg.type !== "MDE_FETCH_CALENDAR") return;
 
-  chrome.runtime.sendMessage({ type: "FETCH_CALENDAR" }, (res) => {
-    const reply = (payload) =>
-      window.postMessage({ source: EXT, ...payload }, window.location.origin);
+  requestCalendar();
+});
 
-    // A dead service worker, or an extension update mid-session.
-    if (chrome.runtime.lastError || !res) {
+/** Ask the service worker for the calendar, retrying a cold start once.
+ *
+ * A dormant service worker is the normal case for the first request after a
+ * browser restart. Chrome should wake it and deliver the message, but the port
+ * can close first -- surfacing as "The message port closed before a response
+ * was received." One retry after a short delay covers it.
+ */
+function requestCalendar(retriesLeft = 1) {
+  const reply = (payload) =>
+    window.postMessage({ source: EXT, ...payload }, window.location.origin);
+
+  chrome.runtime.sendMessage({ type: "FETCH_CALENDAR" }, (res) => {
+    const err = chrome.runtime.lastError;
+    if (err) {
+      const cold = /message port closed|Receiving end does not exist/i.test(err.message || "");
+      if (cold && retriesLeft > 0) {
+        setTimeout(() => requestCalendar(retriesLeft - 1), 350);
+        return;
+      }
       return reply({
         type: "MDE_CALENDAR_ERROR",
-        error: chrome.runtime.lastError?.message ||
+        error: err.message ||
                "The extension's background worker did not respond. Reload this page.",
       });
+    }
+    if (!res) {
+      return reply({ type: "MDE_CALENDAR_ERROR",
+                     error: "The extension worker returned nothing." });
     }
     if (!res.ok) return reply({ type: "MDE_CALENDAR_ERROR", error: res.error });
     reply({ type: "MDE_CALENDAR_RESULT", payload: res.payload });
   });
-});
+}
 
 // Announce unprompted too, for the case where the page's listener is already up.
 announce();

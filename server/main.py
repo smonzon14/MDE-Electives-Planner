@@ -26,15 +26,18 @@ Run locally:  uvicorn server.main:app --reload --port 8000
 """
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import sqlite3
 import sys
+import zipfile
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -446,6 +449,86 @@ def untimed_courses(term: str = DEFAULT_TERM, q: str = "", school: str = "NONH",
         {"key": r["key"], "code": r["code"], "title": r["title"],
          "school": r["school"], "subject": r["subject"],
          "detail_url": r["detail_url"]} for r in rows]}
+
+
+# --------------------------------------------------------------- extension ---
+
+EXTENSION_DIR = ROOT / "extension"
+# Never shipped to the user: notes for whoever edits the manifest.
+_EXT_SKIP = {"MANIFEST-NOTES.md"}
+_EXT_CACHE: dict[str, bytes] = {}
+_HOST_RE = re.compile(r"^[A-Za-z0-9.-]+(:[0-9]{1,5})?$")
+
+
+def _request_origin(request: Request) -> str | None:
+    """The public origin this request arrived on, behind Vercel's proxy."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host or not _HOST_RE.match(host):
+        return None
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if proto not in ("http", "https"):
+        return None
+    # Host is client-controllable, so only ever widen `matches` to the origin
+    # actually being served. Someone spoofing Host could produce a zip trusting
+    # their own domain -- but they could equally write their own extension, so
+    # this grants nothing they don't already have.
+    return f"{proto}://{host}"
+
+
+def _build_extension_zip(origin: str | None) -> bytes:
+    """Zip extension/, pointing content_scripts at the serving origin.
+
+    The match list is a security boundary: any page the content script runs on
+    can ask the extension for the user's class schedule. Rewriting it here means
+    the copy someone downloads trusts exactly the site they downloaded it from,
+    so moving the deployment to a new domain needs no edit and no re-release --
+    and no one is ever tempted to widen it to https://*.vercel.app/*.
+    """
+    manifest = json.loads((EXTENSION_DIR / "manifest.json").read_text())
+    local = ["http://localhost:8000/*", "http://127.0.0.1:8000/*"]
+    matches = local + ([f"{origin}/*"] if origin else [])
+    if origin is None:
+        matches = manifest["content_scripts"][0]["matches"]
+    manifest["content_scripts"][0]["matches"] = list(dict.fromkeys(matches))
+
+    buf = io.BytesIO()
+    # Deterministic: fixed timestamps so the same source yields the same bytes,
+    # which keeps ETags stable across redeploys.
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for path in sorted(EXTENSION_DIR.iterdir()):
+            if not path.is_file() or path.name in _EXT_SKIP:
+                continue
+            info = zipfile.ZipInfo(f"mde-electives-planner/{path.name}",
+                                   date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            data = (json.dumps(manifest, indent=2) + "\n").encode() \
+                if path.name == "manifest.json" else path.read_bytes()
+            z.writestr(info, data)
+    return buf.getvalue()
+
+
+@app.api_route("/api/extension.zip", methods=["GET", "HEAD"])
+def extension_zip(request: Request):
+    """The browser extension, packaged for Load unpacked.
+
+    Built on demand rather than committed, so it can never drift from the source
+    in extension/ and so the manifest can be pointed at this deployment.
+    """
+    if not EXTENSION_DIR.is_dir():
+        raise HTTPException(404, "extension source is not bundled in this deployment")
+    origin = _request_origin(request)
+    key = origin or "-"
+    if key not in _EXT_CACHE:
+        _EXT_CACHE[key] = _build_extension_zip(origin)
+    blob = _EXT_CACHE[key]
+    return Response(
+        content=blob,
+        media_type="application/zip",
+        headers={
+            "content-disposition": 'attachment; filename="mde-electives-planner-extension.zip"',
+            "content-length": str(len(blob)),
+        },
+    )
 
 
 # ---------------------------------------------------------------- schedule ---
