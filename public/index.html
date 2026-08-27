@@ -14,7 +14,14 @@
     <span class="mark"></span>
     <div>
       <h1>MDE Electives Planner</h1>
-      <p class="sub" id="metaLine">loading catalog…</p>
+      <div class="sub metawrap">
+        <span id="metaAgo">loading catalog…</span>
+        <button type="button" id="metaInfo" class="infodot" hidden
+                aria-expanded="false" aria-controls="metaDetails"
+                aria-label="About this catalog">i</button>
+        <div id="metaDetails" class="infopop" role="group"
+             aria-label="Catalog details" hidden></div>
+      </div>
     </div>
   </div>
   <div class="topbar-controls">

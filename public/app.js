@@ -125,11 +125,7 @@ async function boot() {
       `as “cannot verify” rather than guessed — fill them in at <code>approved_lists.yaml</code>.`;
   }
 
-  const li = state.meta.last_ingest;
-  $("#metaLine").textContent =
-    `${(state.meta.terms[0]?.n ?? 0).toLocaleString()} sections · ` +
-    `${state.meta.crosslist_groups} cross-listed groups · ` +
-    `policy ${state.policy.policy_version} · last ingest ${li?.finished_at || "—"}`;
+  renderMeta();
 
   if (!Store.storageAvailable) {
     toast("This browser is blocking local storage, so your plan won't be " +
@@ -153,6 +149,73 @@ async function refreshAll() {
   loadLocked();
   await Promise.all([loadChanges(), search()]);
   await loadPlan();
+}
+
+// ------------------------------------------------------------ catalog meta ---
+//
+// The header used to spell out sections / cross-listed groups / policy version /
+// an ISO timestamp. Only one of those answers a question anyone actually has --
+// "is this data current?" -- so that's the line, in words, and the rest moved
+// behind the info dot.
+
+const RELATIVE_UNITS = [
+  ["year",   365 * 24 * 3600],
+  ["month",   30 * 24 * 3600],
+  ["week",     7 * 24 * 3600],
+  ["day",          24 * 3600],
+  ["hour",              3600],
+  ["minute",              60],
+  ["second",               1],
+];
+
+/** "3 hours ago", "yesterday", "just now". Null if the timestamp is unusable. */
+function timeAgo(iso) {
+  if (!iso) return null;
+  const then = new Date(iso);
+  if (isNaN(then.getTime())) return null;
+
+  const diff = (then.getTime() - Date.now()) / 1000;   // negative = past
+  if (Math.abs(diff) < 45) return "just now";
+
+  const fmt = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  for (const [unit, secs] of RELATIVE_UNITS) {
+    if (Math.abs(diff) >= secs || unit === "second") {
+      return fmt.format(Math.round(diff / secs), unit);
+    }
+  }
+  return null;
+}
+
+function renderMeta() {
+  const li = state.meta.last_ingest;
+  const stamp = li?.finished_at;
+  const ago = timeAgo(stamp);
+
+  $("#metaAgo").textContent = ago ? `Catalog updated ${ago}` : "Catalog date unknown";
+  // Exact time on hover, since "2 days ago" is the wrong resolution during
+  // shopping week when course times move daily.
+  $("#metaAgo").title = stamp ? new Date(stamp).toLocaleString() : "";
+
+  const when = stamp
+    ? new Date(stamp).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    : "unknown";
+  const rows = [
+    [`${(state.meta.terms[0]?.n ?? 0).toLocaleString()} sections`, state.meta.terms[0]?.term || ""],
+    [`${state.meta.crosslist_groups} cross-listed groups`, "heuristic"],
+    [`Policy rev. ${state.policy.policy_version}`, ""],
+    ["Last ingest", when],
+  ];
+  $("#metaDetails").innerHTML = rows.map(
+    ([a, b]) => `<div><b>${esc(a)}</b>${b ? `<span>${esc(b)}</span>` : ""}</div>`).join("");
+  $("#metaInfo").hidden = false;
+}
+
+function toggleMeta(force) {
+  const pop = $("#metaDetails");
+  const open = force !== undefined ? force : pop.hidden;
+  pop.hidden = !open;
+  $("#metaInfo").setAttribute("aria-expanded", String(open));
 }
 
 // --------------------------------------------------------------- profile ---
@@ -834,6 +897,18 @@ $("#addBlockBtn").addEventListener("click", openBlock);
 $("#cancelBlock").addEventListener("click", () => { $("#blockModal").hidden = true; });
 $("#saveBlock").addEventListener("click", saveBlock);
 
+// Hover to peek, click to pin open. Pinning matters because the panel holds
+// text someone may want to select or read slowly.
+let metaPinned = false;
+$("#metaInfo").addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleMeta();
+  metaPinned = !$("#metaDetails").hidden;
+});
+$("#metaInfo").addEventListener("mouseenter", () => toggleMeta(true));
+$(".metawrap").addEventListener("mouseleave", () => { if (!metaPinned) toggleMeta(false); });
+document.addEventListener("click", () => { metaPinned = false; toggleMeta(false); });
+
 $("#importBtn").addEventListener("click", openImport);
 $("#firstRunImport").addEventListener("click", openImport);
 $("#firstRunProfile").addEventListener("click", openProfile);
@@ -864,7 +939,10 @@ $$(".modal").forEach((m) => m.addEventListener("click", (e) => {
   if (e.target === m) m.hidden = true;      // click the backdrop to dismiss
 }));
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") $$(".modal").forEach((m) => { m.hidden = true; });
+  if (e.key !== "Escape") return;
+  $$(".modal").forEach((m) => { m.hidden = true; });
+  metaPinned = false;
+  toggleMeta(false);
 });
 
 $$("#bKind .segbtn").forEach((b) => b.addEventListener("click", () => {
@@ -891,4 +969,7 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => {
   if (t.dataset.tab === "grid") renderGrid();
 }));
 
-boot().catch((e) => { $("#metaLine").textContent = `Failed to load: ${e.message}`; });
+// "4 minutes ago" goes stale on a tab left open all afternoon.
+setInterval(() => { if (state.meta) renderMeta(); }, 60_000);
+
+boot().catch((e) => { $("#metaAgo").textContent = `Failed to load: ${e.message}`; });
