@@ -215,12 +215,6 @@ main.layout { display: grid; gap: 18px; align-items: start;
 .empty { color: var(--muted); font-size: 13px; padding: 18px 0; }
 
 /* ---- profile card ---- */
-.profile-card { background: rgba(165,28,48,.06); border-radius: 9px; padding: 10px 12px; }
-.pc-head { display: flex; justify-content: space-between; align-items: center; }
-.pc-head h2 { margin: 0; }
-.pc-body { font-size: 12.5px; margin-top: 6px; }
-.pc-body .pl { display: block; padding: 1px 0; }
-.pc-body .muted { color: var(--muted); }
 button.tiny { padding: 2px 8px; font-size: 11px; }
 .flabel { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
@@ -522,7 +516,6 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
             background: rgba(180,120,0,.1); border: 1px solid rgba(180,120,0,.4); }
 .overflow ul { margin: 5px 0 0; padding-left: 18px; }
 
-.profile-card.wide { max-width: 560px; }
 .change-list.wide { columns: 2; column-gap: 24px; }
 @media (max-width: 720px) { .change-list.wide { columns: 1; } }
 
@@ -629,3 +622,33 @@ body.drawer-open { overflow: hidden; }
 .combo-head h4 { margin: 0; }
 button.addcombo { border-color: rgba(37,99,235,.5); color: var(--preview); }
 button.addcombo:hover { border-color: var(--preview); background: rgba(37,99,235,.1); }
+
+/* ---- "My background" as a section of the plan column ---- */
+/* It used to be a tinted card capped at 560px, which read as a leftover from
+   the sidebar and did not line up with the full-width sections around it.
+   Now it is a section heading plus a horizontal strip of facts, so the whole
+   tab is one column. */
+.sechead { display: flex; align-items: baseline; justify-content: space-between;
+           gap: 12px; }
+.sechead h3.sec { margin-bottom: 8px; }
+
+/* Grid, not flex-wrap: with flex a wrapped last item stretches across the whole
+   row on its own, which looked like a mistake. auto-fit keeps even columns and
+   matches the caps grid below it. */
+.bgstrip { display: grid; gap: 8px;
+           /* 110px, not 130: the root zoom means the visible ~870px is only
+              ~726 CSS px, and 130 left room for just 5 of the 6 facts. */
+           grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.bgfact { min-width: 0; padding: 7px 10px;
+          border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.bgl { display: block; font-size: 9.5px; text-transform: uppercase;
+       letter-spacing: .05em; color: var(--muted); margin-bottom: 2px; }
+.bgfact b { font-size: 12.5px; font-weight: 600; color: var(--ink);
+            overflow-wrap: anywhere; }
+/* Something still outstanding, e.g. CS50 not yet taken. */
+.bgfact.flag { border-color: rgba(165,28,48,.45); }
+.bgfact.flag b { color: var(--crimson); }
+
+.bgempty { font-size: 12.5px; line-height: 1.5; color: var(--muted);
+           padding: 9px 11px; border: 1px dashed var(--line); border-radius: 8px; }
+.bgempty b { color: var(--ink); }

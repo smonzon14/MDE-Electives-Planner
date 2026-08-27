@@ -316,24 +316,29 @@ function renderProfile() {
   state.electivesThisTerm = electivesThisTerm();
   renderProfileChip();
 
+  const n = state.electivesThisTerm;
+
   if (!p) {
-    box.innerHTML = `<span class="muted">Not set — results assume Year 1 Fall with
-      no SEAS or design background. <b>Set it</b> to get accurate eligibility.</span>`;
+    box.innerHTML = `<div class="bgempty">Not set — results assume <b>Year 1 Fall</b>
+      with no SEAS or design background. Eligibility is a guess until you set it.</div>`;
   } else {
-    box.innerHTML = `
-      <span class="pl"><b>Year ${p.year}, ${esc(p.season)}</b></span>
-      <span class="pl">SEAS background: ${p.seas_background
-        ? `yes${p.seas_areas.length ? " (" + p.seas_areas.map(esc).join(", ") + ")" : ""}` : "no"}</span>
-      <span class="pl">Physical design background: ${p.physical_design_background ? "yes" : "no"}</span>
-      <span class="pl">CS50: ${esc(p.cs50_status.replace(/_/g, " "))}</span>
-      ${p.completed_codes.length
-        ? `<span class="pl muted">${p.completed_codes.length} completed elective(s)</span>` : ""}`;
+    const fact = (label, value, flag = false) =>
+      `<div class="bgfact${flag ? " flag" : ""}"><span class="bgl">${esc(label)}</span>
+        <b>${value}</b></div>`;
+    box.innerHTML = [
+      fact("Program term", `Year ${p.year} · ${esc(p.season)}`),
+      fact("Electives this term", String(n)),
+      fact("SEAS background", p.seas_background
+        ? `Yes${p.seas_areas.length ? ` · ${p.seas_areas.map(esc).join(", ")}` : ""}`
+        : "No"),
+      fact("Physical design", p.physical_design_background ? "Yes" : "No"),
+      fact("CS50", esc(p.cs50_status.replace(/_/g, " ")),
+           p.cs50_status === "required"),
+      fact("Completed electives", p.completed_codes.length
+        ? String(p.completed_codes.length) : "None"),
+    ].join("");
   }
 
-  const n = state.electivesThisTerm;
-  $("#electivesHint").textContent = p
-    ? `Year ${p.year} ${p.season}: ${n} elective${n === 1 ? "" : "s"} this term.`
-    : "";
   $("#pick").innerHTML = [1, 2, 3, 4].map((v) =>
     `<option ${v === n ? "selected" : ""}>${v}</option>`).join("");
   renderSeasonWarn();
