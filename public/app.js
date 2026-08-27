@@ -453,11 +453,22 @@ function policyBadges(pol) {
   // Cores get their own explicit badge; don't also shout "doesn't count".
   if (pol.is_core) return "";
   if (!pol.counts_at_all) return `<span class="badge nocount">doesn't count</span>`;
-  const names = Object.fromEntries(state.policy.requirements.map((r) => [r.id, r.name]));
+  const reqs = Object.fromEntries(state.policy.requirements.map((r) => [r.id, r]));
   return pol.satisfies.filter((v) => v.verdict === "yes" || v.verdict === "verify")
-    .map((v) => `<span class="badge ${v.verdict === "yes" ? "req" : "reqmaybe"}"
-      title="${esc(v.reason)}">${esc(names[v.requirement_id] || v.requirement_id)}${
-      v.verdict === "verify" ? " ?" : ""}</span>`).join("");
+    .map((v) => {
+      const r = reqs[v.requirement_id] || {};
+      // Only rules 1 (GSD) and 2 (SEAS) are minimums you have to satisfy. Rules
+      // 4-7 are ceilings: the course counts toward the 9 and eats cap headroom,
+      // but it satisfies nothing, so it must not wear the same green as a real
+      // requirement. Driven off `kind` rather than an id list so a new rule in
+      // mde_policy.yaml is styled correctly without touching this.
+      const isCap = r.kind === "maximum";
+      const cls = isCap ? "cap" : (v.verdict === "yes" ? "req" : "reqmaybe");
+      const label = esc(r.name || v.requirement_id)
+        + (isCap && r.max_courses ? ` \u00b7 max ${r.max_courses}` : "")
+        + (v.verdict === "verify" ? " ?" : "");
+      return `<span class="badge ${cls}" title="${esc(v.reason)}">${label}</span>`;
+    }).join("");
 }
 
 function courseCard(c, inPlan) {

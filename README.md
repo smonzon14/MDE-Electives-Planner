@@ -417,7 +417,8 @@ nothing"), and are badged distinctly:
 | `fits` (green) | No overlap with anything |
 | `overlaps plan: X` (amber) | Collides with a course you're only *considering* — flagged, never hidden |
 | `clashes: X` (red) | Collides with an enrolled course or a custom block |
-| *(green/amber requirement name)* | Satisfies that requirement (amber `?` = needs verification) |
+| *(green/amber requirement name)* | Satisfies a **minimum** -- rule 1 (GSD) or rule 2 (SEAS). Amber `?` = needs verification |
+| *(grey requirement name · max N)* | Counts toward the 9 and uses up a **cap** (rules 4-7), but satisfies no requirement |
 | `counts toward nothing` | Legal to take, but satisfies no elective requirement |
 | `doesn't count` | Excluded outright by rule 3 (below the 100 level) |
 | `core — not an elective` | A required MDE course; never counts toward the 9 |
