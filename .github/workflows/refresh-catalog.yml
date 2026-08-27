@@ -19,8 +19,8 @@ on:
     - cron: "0 10 * * *"
   workflow_dispatch:
     inputs:
-      term:
-        description: 'Term to crawl (e.g. "2026 Fall")'
+      terms:
+        description: 'Terms to crawl, comma-separated (blank = all of TERMS below)'
         required: false
         default: ""
       max_pages:
@@ -36,10 +36,16 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # Every term the deployed site should offer. The UI's term dropdown is built
+  # from whatever the database actually contains, so adding a term here is the
+  # only change needed to make it selectable.
+  TERMS: "2026 Fall,2027 Spring"
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -52,22 +58,35 @@ jobs:
       - name: Install ingest dependencies
         run: pip install -r requirements-ingest.txt
 
-      - name: Crawl the catalog
+      # One pass per term: crawl, then backfill dates, then detect cross-listings.
+      # Cross-listing detection is per-term by nature (it groups courses sharing
+      # an instructor and meeting time), so it cannot be hoisted out of the loop.
+      - name: Crawl, date and cross-list every term
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.term }}" ];      then ARGS="$ARGS --term '${{ inputs.term }}'"; fi
-          if [ -n "${{ inputs.max_pages }}" ]; then ARGS="$ARGS --max-pages ${{ inputs.max_pages }}"; fi
-          eval python -m ingest.crawl $ARGS
+          set -euo pipefail
+          TERM_LIST="${{ inputs.terms }}"
+          [ -n "$TERM_LIST" ] || TERM_LIST="$TERMS"
+          MAX_PAGES="${{ inputs.max_pages }}"
 
-      # Partial-term courses (HSPH, HSDM, HGSE, HKS, HBSM, HMS) render an empty
-      # session on search cards, so their real date ranges need detail pages.
-      # Without them, two 7-week courses in opposite halves of the term look
-      # like a conflict.
-      - name: Backfill meeting date ranges
-        run: python -m ingest.dates
+          echo "$TERM_LIST" | tr ',' '\n' | while IFS= read -r raw; do
+            term="$(echo "$raw" | sed 's/^ *//; s/ *$//')"
+            [ -n "$term" ] || continue
 
-      - name: Detect cross-listings
-        run: python -m ingest.crosslist
+            echo "::group::$term"
+            if [ -n "$MAX_PAGES" ]; then
+              python -m ingest.crawl --term "$term" --max-pages "$MAX_PAGES"
+            else
+              python -m ingest.crawl --term "$term"
+            fi
+
+            # Partial-term courses (HSPH, HSDM, HGSE, HKS, HBSM, HMS) render an
+            # empty session on search cards, so their real date ranges need
+            # detail pages. Without them, two 7-week courses in opposite halves
+            # of the term look like a conflict.
+            python -m ingest.dates --term "$term"
+            python -m ingest.crosslist "$term"
+            echo "::endgroup::"
+          done
 
       # Rebuild the approved lists from the spreadsheets so an edit to either
       # .xlsx reaches production without a manual step.
@@ -93,13 +112,18 @@ jobs:
           assert h.json()["courses"] > 1000, "catalog looks empty"
 
           m = c.get("/api/meta"); m.raise_for_status()
-          term = m.json()["default_term"]
+          terms = [t["term"] for t in m.json()["terms"]]
+          print("terms in catalog:", terms)
+          assert terms, "no terms ingested at all"
 
-          s = c.post("/api/search", json={"term": term, "include_tba": False, "limit": 1})
-          s.raise_for_status()
-          total = s.json()["total"]
-          print(f"search({term}): {total} sections satisfy a requirement")
-          assert total > 100, "search returned suspiciously few results"
+          # Every term the site offers must actually return results, or the
+          # dropdown would show a term that searches to nothing.
+          for term in terms:
+              s = c.post("/api/search", json={"term": term, "include_tba": False, "limit": 1})
+              s.raise_for_status()
+              total = s.json()["total"]
+              print(f"  search({term}): {total} sections satisfy a requirement")
+              assert total > 100, f"{term} returned suspiciously few results"
           PY
 
       - name: Commit the refreshed catalog

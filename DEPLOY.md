@@ -116,7 +116,14 @@ cross-listings, regenerates the approved lists from the two spreadsheets, seals
 the DB, verifies it the way production opens it, and commits only if something
 changed. The commit triggers the Vercel deploy.
 
-For a smoke test without a full crawl, run it manually with `max_pages: 5`.
+It crawls every term listed in the workflow's `TERMS` env var (currently
+`2026 Fall,2027 Spring`), one full pass each. **Adding a term there is the only
+change needed to make it searchable** — the UI's dropdown is built from whatever
+the database contains. Budget ~10 minutes per term; the job's timeout is 90.
+
+For a smoke test without a full crawl, run it manually with `max_pages: 5`. The
+`terms` input overrides `TERMS` for a single run, so you can refresh one term
+without re-crawling the others.
 
 The job needs `contents: write`, which is already declared. If pushes are
 rejected, enable **Read and write permissions** under Settings → Actions →
