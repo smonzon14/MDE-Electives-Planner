@@ -515,11 +515,17 @@ function courseCard(c, inPlan) {
       <div class="r-meta">
         ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
         ${c.instructors.length ? " · " + esc(c.instructors.join(", ")) : ""}
-        <span class="badge level" title="${esc(pol.level_label || "")}">${esc(pol.level_label || "")}</span>
-        ${policyBadges(pol)}${lists}${extra}
-        ${c.enrolled ? `<span class="badge req">enrolled</span>`
-          : `<button class="pin ghost" data-plan="${esc(c.key)}">${
-              inPlan ? "Remove" : "Add to plan"}</button>`}
+      </div>
+      <div class="r-pills">
+        <div class="r-badges">
+          <span class="badge level" title="${esc(pol.level_label || "")}">${esc(pol.level_label || "")}</span>
+          ${policyBadges(pol)}${lists}${extra}
+        </div>
+        <div class="r-actions">
+          ${c.enrolled ? `<span class="badge req">enrolled</span>`
+            : `<button class="pin ghost" data-plan="${esc(c.key)}">${
+                inPlan ? "Remove" : "Add to plan"}</button>`}
+        </div>
       </div>
       ${warns}
     </li>`;

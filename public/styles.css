@@ -176,6 +176,21 @@ main.layout { display: grid; gap: 18px; align-items: start;
 .r-code { font-weight: 700; font-size: 12px; color: var(--crimson); }
 .r-title { font-weight: 600; }
 .r-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+/* Badges get their own row. They used to share the meta line with a
+   float: right button, so a course with several badges ran straight into
+   "Add to plan". Now the badges wrap inside their own box and the button sits
+   in a fixed cell beside it, so they can never collide however many there are. */
+.r-pills { display: flex; flex-wrap: wrap; align-items: flex-start;
+           gap: 6px 10px; margin-top: 6px; }
+.r-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+            flex: 1 1 200px; min-width: 0; }
+.r-actions { flex: 0 0 auto; margin-left: auto; }
+/* Badges are nowrap everywhere else (grid blocks, combo rows) so they read as
+   single tokens. Here they must be allowed to break: some requirement labels
+   are long enough to overflow a narrow card and run into the button. */
+.r-badges .badge { margin-left: 0; max-width: 100%;
+                   white-space: normal; overflow-wrap: anywhere; }
 .badge {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px;
   border-radius: 20px; margin-left: 5px; white-space: nowrap;
@@ -185,7 +200,7 @@ main.layout { display: grid; gap: 18px; align-items: start;
 .badge.tba { background: rgba(107,114,128,.18); color: var(--muted); }
 .badge.bucket { background: rgba(37,99,235,.14); color: var(--preview); }
 .badge.unverified { background: rgba(122,65,0,.15); color: #7a4100; }
-.pin { float: right; font-size: 11px; padding: 3px 9px; }
+.pin { font-size: 11px; padding: 3px 9px; white-space: nowrap; }
 
 /* ---- combos ---- */
 .combo-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 6px; }
