@@ -3,8 +3,14 @@
   "functions": {
     "api/index.py": {
       "memory": 1024,
-      "maxDuration": 30,
-      "includeFiles": "{data/courses.db,*.yaml,*.py,server/**,ingest/**}"
+      "includeFiles": [
+        "data/courses.db",
+        "config.py",
+        "mde_policy.yaml",
+        "approved_lists.yaml",
+        "server/**",
+        "ingest/**"
+      ]
     }
   },
   "rewrites": [
