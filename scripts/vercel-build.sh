@@ -94,13 +94,13 @@ for a in rel.get("assets", []):
 
 if fetch_asset; then
   record "release-asset"
-elif [ -f "$DEST" ]; then
-  # Transitional: while the catalog is still committed, a failed download must
-  # not break the site. Once it is removed from git this branch cannot be hit,
-  # and the build fails loudly instead -- which is correct.
-  note "WARNING: falling back to the copy committed in the repo"
-  record "repo-fallback"
 else
-  note "ERROR: no catalog available (download failed and none is committed)"
+  # No fallback by design. The catalog is no longer in git, so a failed
+  # download means there is nothing to serve -- and failing the build is far
+  # better than deploying an app whose every request 503s, or silently
+  # shipping a stale copy that looks healthy.
+  note "ERROR: could not fetch the catalog."
+  note "  Check CATALOG_TOKEN in Vercel (fine-grained PAT, Contents: Read-only)."
+  note "  Check that the '${TAG}' release still has a courses.db asset."
   exit 1
 fi

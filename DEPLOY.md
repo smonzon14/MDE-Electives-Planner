@@ -132,8 +132,10 @@ the wrong tool three times over:
 | Vercel → Settings → Environment Variables | `CATALOG_TOKEN` | A fine-grained PAT scoped to this one repo, **Contents: Read-only**. Required because a private repo's release assets are not publicly readable. |
 | GitHub → Settings → Secrets → Actions | `VERCEL_DEPLOY_HOOK` | A Vercel Deploy Hook URL (Project → Settings → Git → Deploy Hooks). Needed because a refresh no longer pushes to git, so nothing would otherwise trigger a deploy. |
 
-Without `CATALOG_TOKEN` the build fails loudly rather than shipping a
-catalog-less app. Without `VERCEL_DEPLOY_HOOK` the job warns and the new
+Without `CATALOG_TOKEN` the build **fails**, deliberately. There is no
+fallback: the catalog is not in git, so the alternative would be deploying an
+app whose every request 503s. Vercel keeps the previous deployment live when a
+build fails, so a bad token means "stops updating", not "goes down". Without `VERCEL_DEPLOY_HOOK` the job warns and the new
 catalog simply waits for the next deploy.
 
 `GET /api/health` reports `catalog_source`, which is the thing to check after a
@@ -142,7 +144,7 @@ deploy:
 | Value | Meaning |
 |---|---|
 | `release-asset` | Correct — freshly downloaded |
-| `repo-fallback` | The download failed and a committed copy was used. Looks healthy, serves a stale catalog. Fix the token. |
+| `repo-fallback` | Only possible on a checkout that still has a committed catalog. Should never appear in production. |
 | `unknown` | The build script did not run |
 
 ### Working locally
