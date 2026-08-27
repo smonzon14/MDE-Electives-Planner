@@ -20,11 +20,15 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 // club meeting or a 7am commute block would be invisible AND unremovable.
 const BASE_DAYS = [1, 2, 3, 4, 5];
 const BASE_START = 8 * 60, BASE_END = 22 * 60;
-const SLOT = 30, PX_PER_MIN = 1;
+const SLOT = 30;
 const NEW_BLOCK_MIN = 90;       // default length for a click-to-create block
+// A half-hour row never shrinks below this or the blocks stop being readable;
+// never grows past this or a short day wastes the pane.
+const SLOT_H_MIN = 13, SLOT_H_MAX = 30;
 
 let gridDays = [...BASE_DAYS];
 let dayStart = BASE_START, dayEnd = BASE_END;
+let pxPerMin = 1;
 
 const CALENDAR_URL = "https://my.harvard.edu/calendar/load/";
 
@@ -719,11 +723,53 @@ function computeGridBounds(items) {
   dayEnd = Math.min(24 * 60, hi);
 }
 
+/** Pick a row height that fits the whole day in the space available.
+ *
+ * At a fixed 1px per minute a normal day is 840px plus headers -- taller than
+ * most viewports, so the pane grew its own scrollbar and the calendar had to be
+ * scrolled separately from the page. Scaling to fit removes that. A very long
+ * day on a very short viewport still bottoms out at SLOT_H_MIN and the
+ * scrollbar returns, which is the right fallback.
+ *
+ * Two things make this fiddlier than it looks:
+ *
+ * - **Units.** :root carries `zoom`, so getBoundingClientRect() and
+ *   innerHeight are in *visual* pixels while the value written to
+ *   --wg-slot-h is a *CSS* pixel that then gets multiplied by the zoom. Mixing
+ *   them silently overflows by exactly the zoom factor.
+ * - **No magic constants.** Rather than guessing how much room the legend and
+ *   the collapsed "moved" summary need, measure the pane minus the grid. That
+ *   figure is independent of row height, so it stays correct if the pane's
+ *   surrounding content ever changes.
+ */
+function fitScale(slots) {
+  const pane = $("#schedulePane");
+  const grid = $("#weekGrid");
+  const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+
+  const paneH = pane.getBoundingClientRect().height;
+  const gridH = grid.getBoundingClientRect().height;
+  // Everything in the pane that is not the calendar: heading, hint, legend,
+  // the collapsed summary. Independent of the row height we are solving for.
+  const chromeVisual = Math.max(0, paneH - gridH);
+  const headerCss = ($("#weekGrid .wg-head")?.offsetHeight) || 29;
+
+  const margin = drawerMode() ? 8 : 24;      // sticky inset, top and bottom
+  const budgetVisual = window.innerHeight - margin - chromeVisual;
+  if (!Number.isFinite(budgetVisual) || budgetVisual < 80) return 22;
+
+  const budgetCss = budgetVisual / zoom - headerCss;
+  return Math.max(SLOT_H_MIN, Math.min(SLOT_H_MAX, Math.floor(budgetCss / slots)));
+}
+
 function renderGrid() {
   const grid = $("#weekGrid");
   const items = gridItems();
   computeGridBounds(items);
   const slots = Math.ceil((dayEnd - dayStart) / SLOT);
+  const slotH = fitScale(slots);
+  pxPerMin = slotH / SLOT;
+  grid.style.setProperty("--wg-slot-h", `${slotH}px`);
 
   grid.style.setProperty("--wg-cols", String(gridDays.length));
   let html = `<div class="wg-head"></div>` +
@@ -744,9 +790,9 @@ function renderGrid() {
     if (!col) return;
     const el = document.createElement("div");
     el.className = `ev ${cls}`;
-    el.style.top = `${(Math.max(start, dayStart) - dayStart) * PX_PER_MIN}px`;
-    el.style.height = `${Math.max(18,
-      (Math.min(end, dayEnd) - Math.max(start, dayStart)) * PX_PER_MIN)}px`;
+    el.style.top = `${(Math.max(start, dayStart) - dayStart) * pxPerMin}px`;
+    el.style.height = `${Math.max(14,
+      (Math.min(end, dayEnd) - Math.max(start, dayStart)) * pxPerMin)}px`;
     // In a ~70px-wide side-pane column the title wraps or clips, so the full
     // text has to be recoverable on hover.
     const full = `${title} · ${sub.replace(/<[^>]*>/g, " ")}${detail ? ` · ${detail}` : ""}`;
@@ -816,8 +862,8 @@ function wireGridCreate() {
       if (e.target.closest(".ev")) { ghost.hidden = true; return; }
       const start = minutesAt(col, e.clientY);
       ghost.hidden = false;
-      ghost.style.top = `${(start - dayStart) * PX_PER_MIN}px`;
-      ghost.style.height = `${NEW_BLOCK_MIN * PX_PER_MIN}px`;
+      ghost.style.top = `${(start - dayStart) * pxPerMin}px`;
+      ghost.style.height = `${NEW_BLOCK_MIN * pxPerMin}px`;
       ghost.textContent = `+ ${fmt(start)}`;
     });
     col.addEventListener("mouseleave", () => { ghost.hidden = true; });
@@ -1278,6 +1324,11 @@ $("#scheduleClose").addEventListener("click", () => setDrawer(false));
 $("#scheduleScrim").addEventListener("click", () => setDrawer(false));
 // Crossing the breakpoint with the drawer open would leave the scrim and the
 // body scroll-lock stranded over a layout that no longer has a drawer.
+let fitTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(renderGrid, 120);
+});
 drawerQuery.addEventListener("change", (e) => {
   if (!e.matches) {
     $("#schedulePane").classList.remove("open");

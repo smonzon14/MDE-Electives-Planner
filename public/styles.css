@@ -83,10 +83,10 @@ main.single { max-width: 1180px; margin: 0 auto; }
    calendar is reference material you consult *while* searching, so hiding it
    behind a tab meant flipping back and forth to answer "does this fit?". */
 main.layout { display: grid; gap: 18px; align-items: start;
-              grid-template-columns: minmax(0, 1fr) var(--sched-w, 440px);
-              max-width: 1560px; margin: 0 auto; }
+              grid-template-columns: minmax(0, 1fr) var(--sched-w, 570px);
+              max-width: 1720px; margin: 0 auto; }
 .main-col { min-width: 0; }        /* lets the grid column actually shrink */
-@media (min-width: 1500px) { main.layout { --sched-w: 520px; } }
+@media (min-width: 1660px) { main.layout { --sched-w: 680px; } }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
 .filters, .content {
@@ -133,11 +133,13 @@ main.layout { display: grid; gap: 18px; align-items: start;
 }
 .wg-time {
   font-size: 10.5px; color: var(--muted); text-align: right;
-  padding: 0 6px; height: 30px; border-bottom: 1px solid var(--line);
+  padding: 0 6px; height: var(--wg-slot-h, 30px);
+  border-bottom: 1px solid var(--line);
   display: flex; align-items: flex-start; justify-content: flex-end;
 }
 .wg-col { position: relative; }
-.wg-slot { height: 30px; border-bottom: 1px solid var(--line); }
+/* Set by renderGrid from the space actually available -- see fitScale(). */
+.wg-slot { height: var(--wg-slot-h, 30px); border-bottom: 1px solid var(--line); }
 .ev {
   position: absolute; left: 3px; right: 3px; border-radius: 6px;
   padding: 3px 6px; font-size: 11px; line-height: 1.25; overflow: hidden;
@@ -530,6 +532,8 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 .schedpane { position: sticky; top: 12px; max-height: calc(100vh - 24px);
              overflow-y: auto; overscroll-behavior: contain;
+             /* The calendar is scaled to fit, so this scrollbar should only
+                ever appear for a very long day on a very short viewport. */
              border: 1px solid var(--line); border-radius: 12px;
              background: var(--panel); padding: 14px 15px; }
 .sp-head { display: flex; align-items: center; justify-content: space-between;
@@ -580,3 +584,11 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 /* Prevent the page behind an open drawer from scrolling. */
 body.drawer-open { overflow: hidden; }
+
+/* ---- collapsed "times that moved" so it doesn't steal calendar height ---- */
+.movedbox { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.movedbox summary { cursor: pointer; font-size: 11.5px; font-weight: 600;
+                    text-transform: uppercase; letter-spacing: .04em;
+                    color: var(--muted); }
+.movedbox summary:hover { color: var(--ink); }
+.movedbox .change-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
