@@ -146,6 +146,18 @@ Without that flag, the server falls back to a read-write handle after a crawl
 
 ## Things that will bite you
 
+**`vercel.json` has to stay schema-pure.** Vercel validates it strictly and
+rejects the whole deploy on any surprise, so two things are deliberate:
+
+- `functions."api/index.py".includeFiles` **must be a single glob string.** An
+  array is only valid in the legacy `builds` config; passing one here fails with
+  `Invalid request: functions.api/index.py.includeFiles should be string`. It is
+  `"**"` so it doesn't depend on brace-expansion support either — the bundle is
+  narrowed by `.vercelignore` instead, which is what drops `.venv/`, the two
+  spreadsheets, the extension and the logs. Result: 26 files, ~7 MB.
+- **No `"//"` pseudo-comment keys.** JSON has no comments, and these objects
+  reject unknown properties. Rationale goes here instead.
+
 **Re-seal after every local crawl** before deploying, or the function will 503.
 
 **Don't add a build step without content-hashing the assets.** There isn't one
