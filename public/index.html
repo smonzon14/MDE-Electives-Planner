@@ -46,12 +46,7 @@
 <div id="toast" class="toast" hidden></div>
 
 <div id="firstRun" class="firstrun" hidden>
-  <div>
-    <b>Two things make this useful.</b>
-    Import your enrolled classes so search can route around them, and set your
-    background so eligibility is accurate. Everything stays in this browser —
-    there is no account and nothing is uploaded.
-  </div>
+  <div id="firstRunText"></div>
   <div class="fr-actions">
     <button id="firstRunImport" class="primary">Import my classes</button>
     <button id="firstRunProfile" class="ghost">Set my background</button>
@@ -158,6 +153,41 @@
     </div>
   </section>
 </main>
+
+<!-- First-run welcome. Opens on load until a schedule has been imported;
+     dismissible, with the #firstRun banner left behind as the standing
+     reminder so this never has to nag twice. -->
+<div id="welcomeModal" class="modal modal-heavy" hidden>
+  <div class="modal-box">
+    <h2 class="modal-title">Two steps and this becomes useful</h2>
+    <p class="hint">This finds electives that fit around the classes you're
+      already locked into. To do that it needs to know what those are.</p>
+
+    <ol class="wsteps">
+      <li>
+        <b>Import your enrolled classes.</b>
+        <span>Takes about fifteen seconds. Paste from my.harvard, or one click
+          if you have the extension.</span>
+      </li>
+      <li>
+        <b>Set your background.</b>
+        <span>The MDE rules branch on whether you have a SEAS or physical
+          design background, so this changes what counts for credit.</span>
+      </li>
+    </ol>
+
+    <p class="wprivacy">
+      Everything stays in this browser. There is no account, no login, and your
+      password, MFA code and cookies are never sent to this site.
+    </p>
+
+    <div class="modal-actions">
+      <button id="welcomeSkip" class="ghost">Later</button>
+      <button id="welcomeProfile" class="ghost">Set my background</button>
+      <button id="welcomeImport" class="primary">Import my classes</button>
+    </div>
+  </div>
+</div>
 
 <!-- Import my.harvard schedule -->
 <div id="importModal" class="modal" hidden>

@@ -197,6 +197,17 @@ export const Store = {
     return { imported: imported.length, kept: manual.length };
   },
 
+  /** Has a my.harvard schedule been imported for this term?
+   *
+   * Distinct from isEmpty(): someone can have a profile and a plan while still
+   * never having imported, which is the case onboarding cares about, because
+   * conflict detection is the whole point of the tool and it has nothing to
+   * work against until this is true.
+   */
+  hasImported(term) {
+    return bucket(term).locked.some((i) => i.source === "harvard");
+  },
+
   clearImported(term) {
     const b = bucket(term);
     const before = b.locked.length;
