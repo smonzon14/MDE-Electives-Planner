@@ -14,9 +14,11 @@ name: Refresh catalog
 
 on:
   schedule:
-    # 10:00 UTC = 06:00 America/New_York during EDT. GitHub cron has no
-    # timezone support, so this drifts an hour in winter -- fine for a catalog.
-    - cron: "0 10 * * *"
+    # Every 8 hours. 10:00 UTC = 06:00 America/New_York during EDT, kept as the
+    # morning slot; GitHub cron has no timezone support, so these drift an hour
+    # in winter -- fine for a catalog. Note GitHub delays scheduled runs under
+    # load and disables them after 60 days with no repo activity.
+    - cron: "0 2,10,18 * * *"
   workflow_dispatch:
     inputs:
       terms:
@@ -48,7 +50,11 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      # Full history: the rebase in the final step needs a merge base, which a
+      # default shallow (depth 1) checkout does not have.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -126,7 +132,7 @@ jobs:
               assert total > 100, f"{term} returned suspiciously few results"
           PY
 
-      - name: Commit the refreshed catalog
+      - name: Commit and push the refreshed catalog
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -137,4 +143,33 @@ jobs:
           fi
           COURSES=$(python -c "import sqlite3;print(sqlite3.connect('data/courses.db').execute('select count(*) from courses').fetchone()[0])")
           git commit -m "chore: refresh catalog ($COURSES sections)"
-          git push
+
+          # The crawl runs for ~15 minutes, so main has usually moved on by the
+          # time we get here and a plain push is rejected -- which used to throw
+          # away the whole crawl. Rebase our single artifact commit onto whatever
+          # landed and try again.
+          #
+          # Rebase, not merge, and never --force: replaying our commit means the
+          # only files we carry forward are the two generated ones, so concurrent
+          # source edits are preserved rather than reverted to our stale checkout.
+          pushed=0
+          for attempt in $(seq 1 5); do
+            if git push; then
+              echo "Pushed on attempt $attempt."
+              pushed=1
+              break
+            fi
+            echo "Push rejected on attempt $attempt; rebasing onto origin/main."
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::Rebase conflicted on a generated file -- data/courses.db or"
+              echo "::error::approved_lists.yaml was edited by hand. Refusing to force-push."
+              exit 1
+            fi
+            sleep $(( attempt * 3 ))
+          done
+          if [ "$pushed" -ne 1 ]; then
+            echo "::error::main kept moving; still could not push after 5 attempts."
+            exit 1
+          fi
