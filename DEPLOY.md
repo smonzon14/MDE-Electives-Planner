@@ -157,6 +157,13 @@ rejects the whole deploy on any surprise, so two things are deliberate:
   spreadsheets, the extension and the logs. Result: 26 files, ~7 MB.
 - **No `"//"` pseudo-comment keys.** JSON has no comments, and these objects
   reject unknown properties. Rationale goes here instead.
+- **`headers[].source` is path-to-regexp, not a raw regex.** `"/(.*)"` is fine,
+  but something like `"/(.*\.(html|js|css)|)"` is rejected with
+  `Header at index N has invalid source pattern`. Rather than hand-craft a
+  narrower pattern, `Cache-Control` is applied on the single `/(.*)` block
+  alongside the security headers. It therefore also lands on `/api/*`
+  responses, which is harmless — those are dynamic and must not be cached
+  anyway.
 
 **Re-seal after every local crawl** before deploying, or the function will 503.
 
