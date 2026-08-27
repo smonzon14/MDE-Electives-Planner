@@ -165,6 +165,15 @@ rejects the whole deploy on any surprise, so two things are deliberate:
   responses, which is harmless — those are dynamic and must not be cached
   anyway.
 
+**Do not add a `rewrites` rule for `/api/*`.** `api/index.py` is already the
+default handler: Vercel serves `public/` from the CDN when a path matches a
+static file, and passes everything else to the function *with its original
+path*, which is exactly what FastAPI's router needs. An explicit
+`{"source": "/api/(.*)", "destination": "/api/index.py"}` rewrites the path the
+function receives, so FastAPI is handed `/api/index.py`, matches no route, and
+returns its own `{"detail":"Not Found"}` for every endpoint. The tell is a JSON
+404 rather than Vercel's HTML 404 page — the function is fine, the path is not.
+
 **Re-seal after every local crawl** before deploying, or the function will 503.
 
 **Don't add a build step without content-hashing the assets.** There isn't one
