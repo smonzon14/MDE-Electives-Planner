@@ -29,6 +29,7 @@ const SLOT_H_MIN = 13, SLOT_H_MAX = 30;
 let gridDays = [...BASE_DAYS];
 let dayStart = BASE_START, dayEnd = BASE_END;
 let pxPerMin = 1;
+let lastSlotH = 0;   // last good row height, reused if a measurement fails
 
 const CALENDAR_URL = "https://my.harvard.edu/calendar/load/";
 
@@ -764,16 +765,34 @@ function fitScale(slots) {
   const headerCss = $("#weekGrid .wg-head")?.offsetHeight || 29;
 
   // As a drawer the pane is fixed to the full viewport height, so it starts at
-  // zero; as a column it starts wherever the layout puts it.
+  // zero; as a column it starts where the layout puts it.
+  //
+  // Measured from `main`, NOT from the pane: Chrome's offsetTop on a sticky
+  // element tracks its *stuck* position, so reading it from the pane returned
+  // 91 at the top of the page and 1012 once scrolled. Every re-render while
+  // scrolled -- hovering a course row triggers one -- then computed a negative
+  // budget and resized the calendar. `main` is not positioned, so its offset is
+  // the static layout position and does not move with scroll.
+  //
+  // This deliberately sizes for the un-stuck case, leaving room for the header.
+  // Once stuck the pane has ~80px more to play with, but using it would mean
+  // the calendar changed height as you scrolled, which is worse than being
+  // slightly shorter than it could be.
   let topCss = 0;
   if (!drawerMode()) {
-    for (let el = pane; el; el = el.offsetParent) topCss += el.offsetTop;
+    const main = pane.parentElement;
+    topCss = parseFloat(getComputedStyle(main).paddingTop) || 0;
+    for (let el = main; el; el = el.offsetParent) topCss += el.offsetTop;
   }
 
   const padCss = 14;      // breathing room below the pane
   const budgetCss = viewportCss - topCss - padCss - chromeCss - headerCss;
-  if (!Number.isFinite(budgetCss) || budgetCss < 80) return 22;
-  return Math.max(SLOT_H_MIN, Math.min(SLOT_H_MAX, Math.floor(budgetCss / slots)));
+  // A nonsensical measurement (mid-transition, pane not laid out yet) must not
+  // produce a *different* height than the normal path -- that is what made the
+  // jump visible. Reuse the last good value instead.
+  if (!Number.isFinite(budgetCss) || budgetCss < 80) return lastSlotH || 22;
+  lastSlotH = Math.max(SLOT_H_MIN, Math.min(SLOT_H_MAX, Math.floor(budgetCss / slots)));
+  return lastSlotH;
 }
 
 function renderGrid() {
