@@ -4,6 +4,11 @@
   --ui-scale: 1.2;
   zoom: var(--ui-scale);
 
+  /* CAUTION: because of the zoom above, vw/vh resolve against the real viewport
+     and are THEN scaled, so `96vw` paints at ~115% of the screen. Divide any
+     viewport unit by --ui-scale, or use a percentage where the containing block
+     is the viewport (percentages resolve correctly in the zoomed space). */
+
   color-scheme: light dark;
   --crimson: #a51c30;
   --bg: #f6f6f7;
@@ -210,7 +215,8 @@ button.tiny { padding: 2px 8px; font-size: 11px; }
 /* display:flex would otherwise override the [hidden] attribute's display:none */
 .modal[hidden] { display: none; }
 .modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-             padding: 20px; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto; }
+             padding: 20px; width: 100%; max-width: 460px;
+             max-height: calc(88vh / var(--ui-scale)); overflow-y: auto; }
 .modal-title { font-size: 15px; margin: 0 0 4px; text-transform: none;
                letter-spacing: normal; color: var(--ink); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
@@ -371,7 +377,8 @@ button.danger:hover { border-color: var(--bad); }
 .infodot:hover, .infodot[aria-expanded="true"] { color: var(--ink); border-color: var(--muted); }
 
 .infopop { position: absolute; top: calc(100% + 7px); left: 0; z-index: 45;
-           width: max-content; max-width: min(330px, calc(100vw - 32px));
+           width: max-content;
+           max-width: min(330px, calc(100vw / var(--ui-scale) - 32px));
            padding: 9px 11px;
            background: var(--panel); border: 1px solid var(--line);
            border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.22);
@@ -531,7 +538,8 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
    Same DOM in both modes so the calendar keeps one code path: a sticky
    companion column on wide screens, a fixed drawer below the breakpoint. */
 
-.schedpane { position: sticky; top: 12px; max-height: calc(100vh - 24px);
+.schedpane { position: sticky; top: 12px;
+             max-height: calc(100vh / var(--ui-scale) - 24px);
              overflow-y: auto; overscroll-behavior: contain;
              /* The calendar is scaled to fit, so this scrollbar should only
                 ever appear for a very long day on a very short viewport. */
@@ -561,7 +569,8 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
   main.layout { grid-template-columns: minmax(0, 1fr); }
 
   .schedpane { position: fixed; inset: 0 0 0 auto; z-index: 70;
-               width: min(860px, 96vw); max-height: none; height: 100%;
+               width: 860px; max-width: calc(100% - 12px);
+               max-height: none; height: 100%;
                border-radius: 0; border: 0; border-left: 1px solid var(--line);
                transform: translateX(100%); transition: transform .22s ease;
                box-shadow: -10px 0 34px rgba(0,0,0,.4); }
