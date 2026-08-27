@@ -132,25 +132,53 @@ jobs:
               assert total > 100, f"{term} returned suspiciously few results"
           PY
 
-      - name: Commit and push the refreshed catalog
+      # The catalog is published as a ROLLING RELEASE ASSET, never committed.
+      # It is ~11 MB of derived data rewritten in full on every refresh, so
+      # committing it added that much permanent, undeltifiable history per
+      # changed day -- three times a day on this schedule -- and git cannot
+      # prune that without rewriting history. Only the current copy is
+      # idempotent with my.harvard, so keeping old ones buys nothing.
+      #
+      # Not Git LFS: LFS still stores every version against a 1 GB allowance,
+      # bills a separate bandwidth quota per checkout, and Vercel does not
+      # fetch LFS objects at all -- the build would ship the ~130-byte pointer
+      # file and SQLite would report the catalog as corrupt.
+      - name: Publish the catalog as a release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          COURSES=$(python -c "import sqlite3;print(sqlite3.connect('data/courses.db').execute('select count(*) from courses').fetchone()[0])")
+          gh release view catalog >/dev/null 2>&1 || \
+            gh release create catalog --title "Catalog artifact (rolling)" \
+              --notes "Rolling artifact, replaced on every refresh. Not a version."
+          gh release upload catalog data/courses.db --clobber
+          gh release edit catalog --notes "Sealed read-only SQLite catalog: $COURSES sections.
+          Rebuilt $(date -u +%Y-%m-%dT%H:%MZ) by refresh-catalog.yml.
+          Replaced on every refresh; no history is kept."
+          echo "Published $COURSES sections as the catalog asset."
+
+      # approved_lists.yaml is still committed: small, text, diffable, and a
+      # change to it means someone edited the source spreadsheets, which is
+      # worth seeing in history. The catalog is no longer part of this step.
+      - name: Commit regenerated approved lists
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f data/courses.db approved_lists.yaml
+          git add approved_lists.yaml
           if git diff --cached --quiet; then
-            echo "Catalog unchanged; nothing to deploy."
+            echo "Approved lists unchanged; nothing to commit."
             exit 0
           fi
-          COURSES=$(python -c "import sqlite3;print(sqlite3.connect('data/courses.db').execute('select count(*) from courses').fetchone()[0])")
-          git commit -m "chore: refresh catalog ($COURSES sections)"
+          git commit -m "chore: regenerate approved lists"
 
           # The crawl runs for ~15 minutes, so main has usually moved on by the
           # time we get here and a plain push is rejected -- which used to throw
-          # away the whole crawl. Rebase our single artifact commit onto whatever
-          # landed and try again.
+          # away the whole crawl. Rebase our single generated commit onto
+          # whatever landed and try again.
           #
           # Rebase, not merge, and never --force: replaying our commit means the
-          # only files we carry forward are the two generated ones, so concurrent
+          # only file we carry forward is the generated one, so concurrent
           # source edits are preserved rather than reverted to our stale checkout.
           pushed=0
           for attempt in $(seq 1 5); do
@@ -163,8 +191,8 @@ jobs:
             git fetch origin main
             if ! git rebase origin/main; then
               git rebase --abort || true
-              echo "::error::Rebase conflicted on a generated file -- data/courses.db or"
-              echo "::error::approved_lists.yaml was edited by hand. Refusing to force-push."
+              echo "::error::Rebase conflicted on approved_lists.yaml -- it was"
+              echo "::error::edited by hand. Refusing to force-push."
               exit 1
             fi
             sleep $(( attempt * 3 ))
@@ -173,3 +201,19 @@ jobs:
             echo "::error::main kept moving; still could not push after 5 attempts."
             exit 1
           fi
+
+      # Nothing pushes to git on a normal refresh now, so the deploy has to be
+      # requested explicitly -- otherwise the asset would be updated and never
+      # served. Set the VERCEL_DEPLOY_HOOK secret to a Vercel Deploy Hook URL.
+      # `if: always()` so a failed approved-lists push still ships the catalog.
+      - name: Trigger the Vercel deploy
+        if: always()
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "${HOOK:-}" ]; then
+            echo "::warning::VERCEL_DEPLOY_HOOK is not set -- the new catalog was published but will not be served until the next deploy."
+            exit 0
+          fi
+          curl -sS --fail-with-body -X POST "$HOOK" -o /dev/null
+          echo "Deploy triggered."

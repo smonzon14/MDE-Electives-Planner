@@ -11,5 +11,10 @@ data/*.db-shm
 # Excel lock files Excel leaves behind while a workbook is open.
 ~$*
 
-# NOT ignored: data/courses.db is the deploy artifact. CI rebuilds it, seals it
-# and commits it, which is what triggers a Vercel deploy. See DEPLOY.md.
+# The catalog is NOT in git. It is ~11 MB of derived data rewritten in full on
+# every refresh, so committing it added that much permanent, undeltifiable
+# history per changed day. It is published as a rolling GitHub release asset
+# instead and fetched at build time. See scripts/vercel-build.sh and DEPLOY.md.
+data/courses.db
+data/CATALOG_SOURCE
+data/BUILD_PROBE

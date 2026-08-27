@@ -46,10 +46,7 @@ git commit -m "MDE Electives Planner"
 gh repo create mde-electives-planner --private --source=. --push
 ```
 
-`data/courses.db` is committed on purpose — it's the deploy artifact. It is
-~6.8 MB and the daily job rewrites it, so the repo will grow by roughly that per
-changed day. If that becomes annoying, switch the workflow to publish the DB as
-a release asset and download it in a Vercel build step.
+`data/courses.db` is **not** in git. See *The catalog artifact* below.
 
 ### 2. Seal the database before the first deploy
 
@@ -107,6 +104,56 @@ the user's own session and posts the result to the page.
 
 **You can skip the extension entirely.** The copy-paste route needs no install,
 works in Safari and Firefox, and is the default the import dialog offers.
+
+## The catalog artifact
+
+The catalog is ~11 MB of SQLite that the refresh job rewrites in full. It is
+published as a **rolling GitHub release asset** on the `catalog` tag — replaced
+every run, no history — and fetched at build time by `scripts/vercel-build.sh`.
+
+Committing it instead added ~11 MB of permanent history per changed day (three
+times a day on the current schedule), which git cannot prune without rewriting
+history. And it buys nothing: the catalog is derived data, reproducible from a
+crawl, so only the *current* copy is idempotent with my.harvard.
+
+**Git LFS is deliberately not used.** It looks like the obvious answer and is
+the wrong tool three times over:
+
+| | |
+|---|---|
+| Doesn't fix the growth | LFS still stores every version, billed against a 1 GB allowance |
+| Costs bandwidth | Separate 1 GB/month transfer quota, consumed by every checkout |
+| **Breaks the build** | Vercel does not fetch LFS objects — it would deploy the ~130-byte pointer file, and SQLite would report the catalog as corrupt |
+
+### Two secrets this needs
+
+| Where | Name | Value |
+|---|---|---|
+| Vercel → Settings → Environment Variables | `CATALOG_TOKEN` | A fine-grained PAT scoped to this one repo, **Contents: Read-only**. Required because a private repo's release assets are not publicly readable. |
+| GitHub → Settings → Secrets → Actions | `VERCEL_DEPLOY_HOOK` | A Vercel Deploy Hook URL (Project → Settings → Git → Deploy Hooks). Needed because a refresh no longer pushes to git, so nothing would otherwise trigger a deploy. |
+
+Without `CATALOG_TOKEN` the build fails loudly rather than shipping a
+catalog-less app. Without `VERCEL_DEPLOY_HOOK` the job warns and the new
+catalog simply waits for the next deploy.
+
+`GET /api/health` reports `catalog_source`, which is the thing to check after a
+deploy:
+
+| Value | Meaning |
+|---|---|
+| `release-asset` | Correct — freshly downloaded |
+| `repo-fallback` | The download failed and a committed copy was used. Looks healthy, serves a stale catalog. Fix the token. |
+| `unknown` | The build script did not run |
+
+### Working locally
+
+A fresh clone has no catalog, so the app will 503 until you fetch one:
+
+```bash
+./scripts/fetch-catalog.sh          # uses your existing gh auth
+# or build it yourself:
+./.venv/bin/python -m ingest.crawl && ./.venv/bin/python -m ingest.seal --in-place
+```
 
 ## The daily catalog refresh
 

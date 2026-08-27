@@ -264,13 +264,15 @@ def health():
         raise
     except Exception as e:
         raise HTTPException(503, f"catalog unavailable: {type(e).__name__}")
-    # Build-time probe: reports whether a file written by the Vercel build
-    # command survives into the function bundle. Temporary.
-    probe = ROOT / "data" / "BUILD_PROBE"
+    # Where the catalog came from. The build downloads it from a release asset
+    # (scripts/vercel-build.sh); "repo-fallback" means that download failed and
+    # a committed copy was used instead, which would otherwise look healthy
+    # while serving a stale catalog.
+    marker = ROOT / "data" / "CATALOG_SOURCE"
     db_file = Path(str(DB_PATH))
     return {"ok": True, "courses": n,
             "policy_version": POLICY.as_dict()["policy_version"],
-            "build_probe": probe.read_text().split() if probe.exists() else None,
+            "catalog_source": marker.read_text().strip() if marker.exists() else "unknown",
             "db_bytes": db_file.stat().st_size if db_file.exists() else None}
 
 
