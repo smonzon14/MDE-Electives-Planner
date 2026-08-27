@@ -1,0 +1,8 @@
+# Extra dependencies for building the catalog: crawling my.harvard, parsing
+# course cards, and reading the two approved-list spreadsheets. Needed by the
+# GitHub Action and for local ingest runs -- never at request time.
+-r requirements.txt
+
+beautifulsoup4==4.15.0
+requests==2.34.2
+openpyxl==3.1.5

@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         width: 330px; margin: 0; padding: 14px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  p { margin: 0 0 10px; opacity: .8; }
+  button { width: 100%; margin-top: 8px; padding: 8px; font: inherit;
+           font-weight: 600; border: 0; border-radius: 6px; cursor: pointer;
+           background: #a51c30; color: #fff; }
+  button.alt { background: transparent; color: inherit; font-weight: 500;
+               border: 1px solid rgba(128,128,128,.45); }
+  button:disabled { opacity: .55; cursor: default; }
+  #status { margin-top: 10px; font-size: 12px; white-space: pre-wrap; }
+  .ok { color: #157347; } .err { color: #b02a37; }
+  hr { border: 0; border-top: 1px solid rgba(128,128,128,.3); margin: 12px 0; }
+  .fine { font-size: 11px; opacity: .65; }
+</style>
+</head>
+<body>
+  <h1>MDE Electives Planner</h1>
+  <p>Open the planner and use <b>Import my classes</b> — this extension handles
+     it from there, without a login.</p>
+
+  <button id="open">Open the planner</button>
+
+  <hr>
+  <p class="fine">Not working? Copy your schedule to the clipboard and paste it
+     into the planner's import box.</p>
+  <button id="copy" class="alt">Copy my calendar JSON</button>
+
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

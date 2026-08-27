@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDE Electives Planner</title>
+<meta name="description" content="Conflict-aware elective search for the Harvard MDE program.">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <div>
+      <h1>MDE Electives Planner</h1>
+      <p class="sub" id="metaLine">loading catalog…</p>
+    </div>
+  </div>
+  <div class="topbar-controls">
+    <label>Term<select id="term"></select></label>
+    <label>Travel buffer
+      <select id="buffer">
+        <option value="0">none</option>
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
+      </select>
+    </label>
+    <button id="importBtn" class="primary">Import my classes</button>
+  </div>
+</header>
+
+<div id="listBanner" class="warn" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<div id="firstRun" class="firstrun" hidden>
+  <div>
+    <b>Two things make this useful.</b>
+    Import your enrolled classes so search can route around them, and set your
+    background so eligibility is accurate. Everything stays in this browser —
+    there is no account and nothing is uploaded.
+  </div>
+  <div class="fr-actions">
+    <button id="firstRunImport" class="primary">Import my classes</button>
+    <button id="firstRunProfile" class="ghost">Set my background</button>
+  </div>
+</div>
+
+<main>
+  <aside class="filters">
+    <div class="profile-card">
+      <div class="pc-head">
+        <h2>My background</h2>
+        <button id="editProfile" class="ghost tiny">Edit</button>
+      </div>
+      <div id="profileSummary" class="pc-body">not set</div>
+      <p class="hint" id="electivesHint"></p>
+    </div>
+
+    <hr>
+    <h2>Filters</h2>
+
+    <label class="f">Search<input id="q" placeholder="title, code, instructor…"></label>
+    <label class="f">Requirement it satisfies
+      <select id="requirement"><option value="">Any requirement</option></select>
+    </label>
+    <label class="f">School<select id="school"><option value="">All schools</option></select></label>
+
+    <label class="check"><input type="checkbox" id="freeOnly" checked>
+      Only courses that fit my schedule</label>
+    <label class="check"><input type="checkbox" id="fProjectBased">
+      Project-based only <span class="rule">rule 1a</span></label>
+
+    <label class="check"><input type="checkbox" id="fTechnical">
+      Technical only <span class="rule">rule 2</span></label>
+
+    <label class="check"><input type="checkbox" id="includeNoCredit">
+      Also show courses that count toward nothing</label>
+    <label class="check"><input type="checkbox" id="includeTba">
+      Include TBA / async (no fixed time)</label>
+
+    <hr>
+    <div class="pc-head">
+      <h2>My locked schedule</h2>
+      <button id="addBlockBtn" class="ghost tiny">+ Block</button>
+    </div>
+    <p class="hint">Imported from my.harvard, plus anything you add by hand.</p>
+    <ul id="lockedList" class="locked-list"></ul>
+
+    <hr>
+    <h2>Recently moved</h2>
+    <ul id="changeList" class="change-list"></ul>
+
+    <hr>
+    <h2>My data</h2>
+    <p class="hint">Your plan lives only in this browser. There is no account,
+      so use a backup file to move it to another computer.</p>
+    <div class="datarow">
+      <button id="exportBtn" class="ghost tiny">Save backup</button>
+      <label class="ghost tiny filelabel">Load backup
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </label>
+      <button id="resetBtn" class="ghost tiny danger">Clear</button>
+    </div>
+  </aside>
+
+  <section class="content">
+    <nav class="tabs">
+      <button class="tab active" data-tab="grid">Week grid</button>
+      <button class="tab" data-tab="list">Course list</button>
+      <button class="tab" data-tab="combos">Combinations</button>
+      <button class="tab" data-tab="plan">My plan <span id="planCount" class="pill">0</span></button>
+    </nav>
+
+    <div id="tab-grid" class="tabpanel active">
+      <div class="grid-wrap"><div id="weekGrid" class="week-grid"></div></div>
+      <p class="hint legend">
+        <span class="chip locked"></span> locked
+        <span class="chip preview"></span> preview (hover a course)
+        <span class="chip pinned"></span> in my plan
+      </p>
+    </div>
+
+    <div id="tab-list" class="tabpanel">
+      <div class="result-head">
+        <span id="resultCount">—</span>
+        <button id="loadMore" class="ghost" hidden>Load more</button>
+      </div>
+      <ul id="results" class="results"></ul>
+    </div>
+
+    <div id="tab-combos" class="tabpanel">
+      <div class="combo-controls">
+        <label>Pick<select id="pick"></select></label>
+        <button id="findCombos">Find valid combinations</button>
+      </div>
+      <p class="hint">Every set of electives that fits around your locked classes,
+        doesn't collide with itself, and can count for credit under your background.</p>
+      <div id="combos"></div>
+    </div>
+
+    <div id="tab-plan" class="tabpanel">
+      <div id="planReport"></div>
+      <h3 class="sec">Courses in my plan</h3>
+      <ul id="planList" class="results"></ul>
+    </div>
+  </section>
+</main>
+
+<!-- Import my.harvard schedule -->
+<div id="importModal" class="modal" hidden>
+  <div class="modal-box wide">
+    <h2 class="modal-title">Import my enrolled classes</h2>
+    <p class="hint">my.harvard's course catalog is public, but your own schedule
+      is not — it needs your session. Both routes below read it in
+      <b>your</b> browser. Your password, MFA code and cookies never reach this
+      site; only class titles, codes and meeting times do.</p>
+
+    <div class="imp-route">
+      <h3>One click</h3>
+      <button id="impOneClick" class="primary" hidden>Import with the extension</button>
+      <p class="hint" id="impNoExt">The browser extension isn't installed or
+        isn't active on this page. Use the copy-paste route below — it works
+        everywhere, including Safari and Firefox, and needs no install.</p>
+    </div>
+
+    <div class="imp-route">
+      <h3>Copy and paste — no install needed</h3>
+      <ol class="steps">
+        <li>Make sure you're signed in to my.harvard.</li>
+        <li>Open <a id="impUrl" class="ext" href="https://my.harvard.edu/calendar/load/"
+              target="_blank" rel="noopener noreferrer">this calendar link</a>
+            in a new tab. You'll see a wall of JSON.</li>
+        <li>Select all of it (⌘A / Ctrl-A), copy, and paste it below.</li>
+      </ol>
+      <textarea id="impPaste" rows="6" spellcheck="false"
+        placeholder='{"events":[ … ]}'></textarea>
+      <div class="modal-actions tight">
+        <button id="impPasteGo" class="primary">Import from pasted JSON</button>
+      </div>
+    </div>
+
+    <div id="impError" class="berr" hidden></div>
+    <div id="impResult" class="impok" hidden></div>
+
+    <div class="modal-actions">
+      <button id="impClear" class="ghost danger">Remove imported classes</button>
+      <button id="closeImport" class="ghost">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile editor -->
+<div id="profileModal" class="modal" hidden>
+  <div class="modal-box">
+    <h2 class="modal-title">My background</h2>
+    <p class="hint">The MDE elective rules branch on your background and your term,
+      so these answers change what counts for credit.</p>
+
+    <div class="row2">
+      <label class="f">Year
+        <select id="pYear"><option value="1">Year 1</option><option value="2">Year 2</option></select>
+      </label>
+      <label class="f">Semester
+        <select id="pSeason"><option>Fall</option><option>Spring</option></select>
+      </label>
+    </div>
+
+    <label class="check"><input type="checkbox" id="pSeasBg">
+      I have a background in a SEAS area of study (engineering, computer science, …)
+    </label>
+    <div id="pAreasWrap" class="f" hidden>
+      <span class="flabel">My area(s) of study</span>
+      <div id="pAreas" class="chips"></div>
+      <p class="hint">Courses in your area must be graduate level (2xx / 2xxx).</p>
+    </div>
+
+    <label class="check"><input type="checkbox" id="pDesignBg">
+      I have a physical design background (architecture, industrial design, …)
+    </label>
+    <p class="hint indent">If unchecked, one of your two GSD courses must be project-based.</p>
+
+    <label class="f">CS50 status
+      <select id="pCs50">
+        <option value="required">Still required (first semester)</option>
+        <option value="online_certificate">Waived — online certificate</option>
+        <option value="petition">Waived — petition</option>
+        <option value="completed">Already completed</option>
+      </select>
+    </label>
+
+    <label class="f">Electives already completed
+      <input id="pCompleted" placeholder="e.g. DES3491, COMPSCI2831">
+    </label>
+    <p class="hint">Comma-separated course codes. Used for the 9-elective totals and caps.</p>
+
+    <div class="modal-actions">
+      <button id="cancelProfile" class="ghost">Cancel</button>
+      <button id="saveProfile">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom block editor -->
+<div id="blockModal" class="modal" hidden>
+  <div class="modal-box">
+    <h2 class="modal-title">Add a block</h2>
+    <p class="hint">Anything my.harvard doesn't know about — club meetings, work,
+      commute — or an MIT cross-registration course, which my.harvard lists with
+      no meeting time.</p>
+
+    <div class="seg" id="bKind">
+      <button class="segbtn active" data-kind="obligation">Obligation</button>
+      <button class="segbtn" data-kind="course">Outside course (MIT)</button>
+    </div>
+
+    <div id="bCourseWrap" hidden>
+      <label class="f">Find the my.harvard listing
+        <input id="bCourseQ" placeholder="e.g. 6.5940 or TinyML" autocomplete="off">
+      </label>
+      <ul id="bCourseResults" class="picklist"></ul>
+      <p class="hint" id="bCoursePicked"></p>
+    </div>
+
+    <label class="f">Title<input id="bTitle" placeholder="e.g. MDE club meeting"></label>
+
+    <span class="flabel">Days</span>
+    <div id="bDays" class="chips"></div>
+
+    <div class="row2">
+      <label class="f">Start<input id="bStart" type="time" value="18:00"></label>
+      <label class="f">End<input id="bEnd" type="time" value="19:30"></label>
+    </div>
+    <div class="row2">
+      <label class="f">First date (optional)<input id="bFrom" type="date"></label>
+      <label class="f">Last date (optional)<input id="bTo" type="date"></label>
+    </div>
+    <p class="hint">Leave dates blank to run all term. Setting them lets a
+      half-term block stop conflicting with courses in the other half.</p>
+
+    <div id="bError" class="berr" hidden></div>
+    <div class="modal-actions">
+      <button id="cancelBlock" class="ghost">Cancel</button>
+      <button id="saveBlock">Add block</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

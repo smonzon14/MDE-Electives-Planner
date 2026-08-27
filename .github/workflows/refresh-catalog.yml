@@ -1,0 +1,116 @@
+# Rebuild the course catalog and ship it.
+#
+# The crawl is ~545 paginated fetches over 8-10 minutes, which no serverless
+# function will host -- Vercel's ceiling is far below that. So the catalog is a
+# BUILD ARTIFACT: this workflow crawls, backfills dates, detects cross-listings,
+# seals the database read-only, and commits it. That push is what triggers the
+# Vercel deploy, so the site always serves a database built by a reproducible
+# job rather than one uploaded from a laptop.
+#
+# Nothing here touches personal data: the catalog is public and identical for
+# every student, and no login is involved at any point.
+
+name: Refresh catalog
+
+on:
+  schedule:
+    # 10:00 UTC = 06:00 America/New_York during EDT. GitHub cron has no
+    # timezone support, so this drifts an hour in winter -- fine for a catalog.
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+    inputs:
+      term:
+        description: 'Term to crawl (e.g. "2026 Fall")'
+        required: false
+        default: ""
+      max_pages:
+        description: "Limit pages (smoke test; blank = full crawl)"
+        required: false
+        default: ""
+
+# Two crawls writing the same DB would race on the commit.
+concurrency:
+  group: refresh-catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ingest dependencies
+        run: pip install -r requirements-ingest.txt
+
+      - name: Crawl the catalog
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.term }}" ];      then ARGS="$ARGS --term '${{ inputs.term }}'"; fi
+          if [ -n "${{ inputs.max_pages }}" ]; then ARGS="$ARGS --max-pages ${{ inputs.max_pages }}"; fi
+          eval python -m ingest.crawl $ARGS
+
+      # Partial-term courses (HSPH, HSDM, HGSE, HKS, HBSM, HMS) render an empty
+      # session on search cards, so their real date ranges need detail pages.
+      # Without them, two 7-week courses in opposite halves of the term look
+      # like a conflict.
+      - name: Backfill meeting date ranges
+        run: python -m ingest.dates
+
+      - name: Detect cross-listings
+        run: python -m ingest.crosslist
+
+      # Rebuild the approved lists from the spreadsheets so an edit to either
+      # .xlsx reaches production without a manual step.
+      - name: Regenerate approved lists
+        run: python -m ingest.approved
+
+      # WAL-mode databases cannot be opened read-only at all, and the deployed
+      # API has no writable filesystem. This is not optional.
+      - name: Seal the database for read-only serving
+        run: python -m ingest.seal --in-place
+
+      - name: Verify the artifact the way production opens it
+        env:
+          MDE_STRICT_READONLY: "1"
+        run: |
+          pip install -r requirements.txt httpx   # httpx backs TestClient
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from server.main import app
+          c = TestClient(app)
+          h = c.get("/api/health"); h.raise_for_status()
+          print("health:", h.json())
+          assert h.json()["courses"] > 1000, "catalog looks empty"
+
+          m = c.get("/api/meta"); m.raise_for_status()
+          term = m.json()["default_term"]
+
+          s = c.post("/api/search", json={"term": term, "include_tba": False, "limit": 1})
+          s.raise_for_status()
+          total = s.json()["total"]
+          print(f"search({term}): {total} sections satisfy a requirement")
+          assert total > 100, "search returned suspiciously few results"
+          PY
+
+      - name: Commit the refreshed catalog
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/courses.db approved_lists.yaml
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged; nothing to deploy."
+            exit 0
+          fi
+          COURSES=$(python -c "import sqlite3;print(sqlite3.connect('data/courses.db').execute('select count(*) from courses').fetchone()[0])")
+          git commit -m "chore: refresh catalog ($COURSES sections)"
+          git push

@@ -1,0 +1,236 @@
+# MDE Elective Policy -- machine-encoded from "MDE Elective Policy", last updated 8/10/25.
+#
+# This file encodes the policy text. Three referenced lists ("approved
+# project-based courses", "approved technical courses", "approved 0-100-level
+# courses") are NOT in the policy PDF and must be supplied separately -- see
+# approved_lists.yaml. Until those are filled in, the app reports the affected
+# requirements as "cannot verify" rather than guessing.
+#
+# Nothing here replaces your advisor. Rule 8: all exceptions go to the program
+# manager via petition.
+
+program: MDE
+policy_version: "2025-08-10"
+term_default: "2026 Fall"
+
+# ---------------------------------------------------------------------------
+# Curriculum structure. Year 2 restarts elective numbering; 4 + 5 = 9 total.
+# ---------------------------------------------------------------------------
+electives_total: 9
+credits_per_elective: 4
+required_credits_per_semester: 18
+
+electives_by_term:
+  "1-Fall":   2      # Elective 1 (or CS50) + Elective 2
+  "1-Spring": 2      # Electives 3-4
+  "2-Fall":   3      # Electives 1-3
+  "2-Spring": 2      # Electives 4-5
+
+cores_by_term:
+  "1-Fall":   ["Collaborative Design Engineering Studio I", "Integrative Frameworks for Technology, Environment and Society I"]
+  "1-Spring": ["Collaborative Design Engineering Studio II", "Integrative Frameworks for Technology, Environment and Society II"]
+  "2-Fall":   ["Independent Design Engineering Project I"]
+  "2-Spring": ["Independent Design Engineering Project II"]
+
+# Core (required) course codes. These are NOT electives and must never be
+# counted toward the 9 -- otherwise the GSD minimum looks satisfied by courses
+# every MDE student takes anyway.
+#
+# The policy PDF names the cores but gives no course codes; these were matched
+# from a real 2026 Fall enrolment. Note the Year 1 title has drifted: the PDF
+# says "Technology, Environment and Society", the catalog says "Technology,
+# Organizations, and Society" (PRO 7231). Same core, retitled.
+core_codes:
+  - code: STU1231
+    name: "Collaborative Design Engineering Studio I"
+    term_slot: "1-Fall"
+    verified_from: "2026 Fall enrolment"
+  - code: PRO7231
+    name: "Integrative Frameworks for Technology, Organizations, and Society"
+    term_slot: "1-Fall"
+    verified_from: "2026 Fall enrolment"
+# Codes below are UNCONFIRMED -- add them as you learn them.
+#  - code: ""
+#    name: "Collaborative Design Engineering Studio II"
+#    term_slot: "1-Spring"
+
+# ---------------------------------------------------------------------------
+# CS50 (footnote to the curriculum diagram)
+# ---------------------------------------------------------------------------
+cs50:
+  code: COMPSCI50
+  subject: COMPSCI
+  catalog: "50"
+  # Required as an elective in the FIRST semester unless waived by (1) a graded
+  # online CS50 certificate completed before the first semester, or (2) a waiver
+  # petition based on prior experience/coursework.
+  required_first_semester: true
+  waiver_options: [online_certificate, petition]
+  # CS50 is below the 100 level but is explicitly exempted from rule 3.
+  exempt_from_below_100_rule: true
+
+# ---------------------------------------------------------------------------
+# How to identify SEAS courses (policy p.3). SEAS is a SUBSET of FAS.
+# ---------------------------------------------------------------------------
+seas:
+  school: FAS
+  subjects: [APCOMP, APMTH, APPHY, BE, COMPSCI, ENG-SCI, ESE]
+  # An E-PSCI course counts as SEAS only if the instructor is SEAS faculty.
+  # Not determinable from catalog data -- always surfaced as "verify instructor".
+  conditional_subjects:
+    E-PSCI: "counts as SEAS only if the instructor is a SEAS faculty member"
+
+# ---------------------------------------------------------------------------
+# FAS course level guide (policy p.4). Applies to FAS/SEAS numbering only --
+# GSD and the other Harvard graduate schools are graduate-level by definition.
+# ---------------------------------------------------------------------------
+fas_levels:
+  below_100:
+    max: 99
+    label: "Below 100 level"
+    graduate: false
+    note: "Rule 3: requires program director approval, normally taken as an overload, and does not count toward elective requirements or the 18-credit semester load (CS50 and approved exceptions excluded)."
+  ug_and_grad:
+    ranges: [[100, 199], [1000, 1999]]
+    label: "For Undergraduates and Graduates"
+    graduate: false
+    note: "Not a graduate-level elective unless the instructor modifies it for graduate students. Written proof must be submitted to the MDE program office."
+  graduate:
+    ranges: [[200, 299], [2000, 2999]]
+    label: "Primarily for Graduates"
+    graduate: true
+  grad_research:
+    ranges: [[300, 399], [3000, 3999]]
+    label: "Graduate Courses of Reading and Research"
+    graduate: true
+    note: "Likely an independent study / reading course -- see rule 7 (max 1, cannot satisfy GSD or SEAS requirements)."
+
+# Schools whose courses are graduate-level by definition.
+graduate_by_default_schools: [GSD, HBSD, HBSM, HDS, HGSE, HKS, HLS, HMS, HSDM, HSPH]
+
+# Non-Harvard cross-registration. my.harvard files these under school "NONH"
+# (subject "MIT"), listing ~2,000 MIT courses with NO meeting times at all.
+#
+# The FAS level guide must NOT be applied to them: MIT numbers like "1.000"
+# would parse as level 1 and get thrown out by rule 3 as a sub-100-level course.
+# MIT's numbering encodes department, not level, so graduate standing cannot be
+# inferred from the number -- it is always reported as "verify".
+outside_harvard_schools: [NONH]
+
+# ---------------------------------------------------------------------------
+# Requirements (policy "Policy on 9 Elective Courses")
+# ---------------------------------------------------------------------------
+requirements:
+
+  - id: gsd
+    rule: 1
+    name: "GSD electives"
+    kind: minimum
+    min_courses: 2
+    min_credits: 8
+    match:
+      school: [GSD]
+    requires_graduate_level: true
+    # 1a: one of the two must be project-based, but ONLY for students without a
+    # physical design background (architecture, industrial design, etc.).
+    conditional_sub_requirement:
+      id: gsd_project_based
+      applies_when: "not profile.physical_design_background"
+      min_courses: 1
+      approved_list: project_based
+      description: "One of the two GSD courses must be project-based (students without a physical design background only)."
+
+  - id: seas
+    rule: 2
+    name: "SEAS electives"
+    kind: minimum
+    min_courses: 2
+    min_credits: 8
+    match:
+      seas: true
+    # 2a/2b: the level gate depends on the student's background.
+    level_policy:
+      with_seas_background:
+        min_level: 200
+        note: "Rule 2a-i: courses in your area of study must be graduate level (2xx / ES2xx / CS2xx). Switching area of study may be petitioned."
+      without_seas_background:
+        min_level: 200
+        allow_100_level_if_approved: true
+        approved_list: seas_0_100
+        note: "Rule 2b-i: may be graduate level (2xx) or an approved 0-100-level (1xx) course."
+    # 2a-ii / 2b-ii: applies to EVERY student regardless of background.
+    sub_requirement:
+      id: seas_technical
+      min_courses: 1
+      approved_list: technical
+      description: "At least one SEAS course must be technical, at a level appropriate to your background."
+
+  - id: fas_non_seas
+    rule: 4
+    name: "FAS courses (non-SEAS subject areas)"
+    kind: maximum
+    max_courses: 4
+    match:
+      school: [FAS]
+      seas: false
+    requires_graduate_level: true
+
+  - id: outside_harvard
+    rule: 5
+    name: "Courses outside Harvard (e.g. MIT)"
+    kind: maximum
+    max_courses: 4
+    requires_graduate_level: true
+    match:
+      school: [NONH]
+    # Listed in my.harvard but with no meeting times, so schedule them with a
+    # custom block until an MIT feed is available.
+    catalog_coverage: listings_only_no_times
+
+  - id: other_harvard
+    rule: 6
+    name: "Other Harvard graduate schools (non-GSD)"
+    kind: maximum
+    max_courses: 4
+    match:
+      school: [HBSD, HBSM, HDS, HGSE, HKS, HLS, HMS, HSDM, HSPH]
+
+  - id: independent_study
+    rule: 7
+    name: "Independent study / reading courses"
+    kind: maximum
+    max_courses: 1
+    cannot_satisfy: [gsd, seas]
+    description: "Requires a petition approved by your advisor and the sponsoring faculty member."
+    # Heuristic detection only -- always flagged for human confirmation.
+    detect:
+      title_regex: "(independent study|reading (course|and research)|directed (study|reading)|special topics.*individual)"
+      fas_level_range: [300, 399]
+
+# ---------------------------------------------------------------------------
+# Rule 3: sub-100-level courses
+# ---------------------------------------------------------------------------
+below_100_rule:
+  rule: 3
+  requires_director_approval: true
+  counts_toward_requirements: false
+  counts_toward_semester_credits: false
+  exceptions: [COMPSCI50]
+
+# ---------------------------------------------------------------------------
+# Cross-listed and joint courses (policy p.3)
+# ---------------------------------------------------------------------------
+crosslisting:
+  # GSD<->SEAS cross-lists may count as GSD OR SEAS, never both.
+  gsd_seas_either_not_both: true
+  # A SEAS course cross-listed with the GSD is automatically adjusted for
+  # graduate students, so it counts as graduate level via GSD enrollment.
+  seas_via_gsd_is_graduate: true
+  # FAS/other-school courses cross-listed with GSD and/or SEAS cannot count as
+  # a GSD or SEAS elective at all.
+  fas_crosslist_cannot_count_as_gsd_or_seas: true
+  # Explicit overrides from the policy text.
+  overrides:
+    - codes: [SCI6272, ENG-SCI239, ENG-SCI139]
+      counts_only_as: seas
+      note: "Policy names this the sole exception to the either-not-both rule."
