@@ -22,7 +22,7 @@ const CALENDAR_URL = "https://my.harvard.edu/calendar/load/";
 
 const state = {
   meta: null, policy: null,
-  results: [], locked: [], plan: new Map(),
+  results: [], locked: [], plan: new Map(), hiddenTba: 0,
   preview: null, offset: 0, limit: 100, total: 0,
   electivesThisTerm: 2,
   extension: false,        // set true when the extension announces itself
@@ -430,6 +430,7 @@ async function search(append = false) {
     searchBody({ limit: state.limit, offset: state.offset }));
   state.total = d.total;
   state.electivesThisTerm = d.electives_this_term;
+  state.hiddenTba = d.hidden_tba || 0;
   state.results = append ? state.results.concat(d.results) : d.results;
   renderResults();
 }
@@ -442,6 +443,7 @@ async function refreshResults() {
   const shown = Math.max(state.limit, state.results.length);
   const d = await post("/api/search", searchBody({ limit: shown, offset: 0 }));
   state.total = d.total;
+  state.hiddenTba = d.hidden_tba || 0;
   state.results = d.results;
   renderResults();
 }
@@ -512,6 +514,23 @@ function renderResults() {
     `${state.total.toLocaleString()} matching section${state.total === 1 ? "" : "s"}` +
     (state.results.length < state.total ? ` — showing ${state.results.length}` : "");
   $("#loadMore").hidden = state.results.length >= state.total;
+
+  // A school can be entirely untimed early in a planning cycle -- GSD had 153
+  // Spring 2027 sections and not one meeting time. Since "include TBA" is off
+  // by default, saying nothing here reads as "nothing is offered".
+  const n = state.hiddenTba || 0;
+  const note = $("#tbaNote");
+  note.hidden = !n;
+  if (n) {
+    note.innerHTML = `${n.toLocaleString()} more course${n === 1 ? "" : "s"} would
+      match, but ${n === 1 ? "has" : "have"} no published meeting time yet —
+      common before a term's schedule is finalised.
+      <button id="tbaShow" class="ghost tiny">Show them</button>`;
+    $("#tbaShow").addEventListener("click", () => {
+      $("#includeTba").checked = true;
+      search();
+    });
+  }
 
   const ul = $("#results");
   if (!state.results.length) {
