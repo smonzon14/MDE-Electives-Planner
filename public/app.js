@@ -723,42 +723,56 @@ function computeGridBounds(items) {
   dayEnd = Math.min(24 * 60, hi);
 }
 
-/** Pick a row height that fits the whole day in the space available.
+/** Pick a row height so the whole pane fits the viewport without scrolling.
  *
  * At a fixed 1px per minute a normal day is 840px plus headers -- taller than
- * most viewports, so the pane grew its own scrollbar and the calendar had to be
- * scrolled separately from the page. Scaling to fit removes that. A very long
- * day on a very short viewport still bottoms out at SLOT_H_MIN and the
- * scrollbar returns, which is the right fallback.
+ * most viewports, so the calendar had to be scrolled separately from the page.
  *
- * Two things make this fiddlier than it looks:
+ * Three things make this fiddlier than it looks:
  *
  * - **Units.** :root carries `zoom`, so getBoundingClientRect() and
- *   innerHeight are in *visual* pixels while the value written to
- *   --wg-slot-h is a *CSS* pixel that then gets multiplied by the zoom. Mixing
- *   them silently overflows by exactly the zoom factor.
- * - **No magic constants.** Rather than guessing how much room the legend and
- *   the collapsed "moved" summary need, measure the pane minus the grid. That
- *   figure is independent of row height, so it stays correct if the pane's
- *   surrounding content ever changes.
+ *   innerHeight are in *visual* pixels, while offsetTop/offsetHeight and the
+ *   value written to --wg-slot-h are *CSS* pixels that then get multiplied by
+ *   the zoom. Everything below is CSS pixels, with innerHeight converted once.
+ * - **Where the pane starts.** In the two-pane layout the pane begins below the
+ *   topbar, not at the top of the viewport. Ignoring that offset oversized the
+ *   grid by exactly that much and pushed the pane ~80px below the fold.
+ *   offsetTop is used rather than getBoundingClientRect() because it reports
+ *   the static position, unaffected by `position: sticky` having engaged.
+ * - **No magic constants.** The space taken by the heading, legend and
+ *   collapsed summary is measured as pane-minus-grid, which is independent of
+ *   the row height being solved for.
  */
 function fitScale(slots) {
   const pane = $("#schedulePane");
   const grid = $("#weekGrid");
   const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+  const viewportCss = window.innerHeight / zoom;
 
-  const paneH = pane.getBoundingClientRect().height;
-  const gridH = grid.getBoundingClientRect().height;
-  // Everything in the pane that is not the calendar: heading, hint, legend,
-  // the collapsed summary. Independent of the row height we are solving for.
-  const chromeVisual = Math.max(0, paneH - gridH);
-  const headerCss = ($("#weekGrid .wg-head")?.offsetHeight) || 29;
+  // Space the pane spends on everything that isn't the calendar, measured
+  // relative to the pane's own box. NOT pane.offsetHeight - grid.offsetHeight:
+  // as a drawer the pane is height:100%, so that difference is leftover space
+  // rather than chrome, and the calendar would be sized from its own slack.
+  const wrap = $(".grid-wrap");
+  const kids = [...pane.children];
+  const last = kids[kids.length - 1];
+  const padBottom = parseFloat(getComputedStyle(pane).paddingBottom) || 0;
+  const above = wrap.offsetTop;                     // includes padding-top
+  const below = Math.max(0, (last.offsetTop + last.offsetHeight)
+                            - (wrap.offsetTop + wrap.offsetHeight));
+  const chromeCss = above + below + padBottom;
+  const headerCss = $("#weekGrid .wg-head")?.offsetHeight || 29;
 
-  const margin = drawerMode() ? 8 : 24;      // sticky inset, top and bottom
-  const budgetVisual = window.innerHeight - margin - chromeVisual;
-  if (!Number.isFinite(budgetVisual) || budgetVisual < 80) return 22;
+  // As a drawer the pane is fixed to the full viewport height, so it starts at
+  // zero; as a column it starts wherever the layout puts it.
+  let topCss = 0;
+  if (!drawerMode()) {
+    for (let el = pane; el; el = el.offsetParent) topCss += el.offsetTop;
+  }
 
-  const budgetCss = budgetVisual / zoom - headerCss;
+  const padCss = 14;      // breathing room below the pane
+  const budgetCss = viewportCss - topCss - padCss - chromeCss - headerCss;
+  if (!Number.isFinite(budgetCss) || budgetCss < 80) return 22;
   return Math.max(SLOT_H_MIN, Math.min(SLOT_H_MAX, Math.floor(budgetCss / slots)));
 }
 

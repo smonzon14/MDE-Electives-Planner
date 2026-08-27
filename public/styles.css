@@ -83,10 +83,11 @@ main.single { max-width: 1180px; margin: 0 auto; }
    calendar is reference material you consult *while* searching, so hiding it
    behind a tab meant flipping back and forth to answer "does this fit?". */
 main.layout { display: grid; gap: 18px; align-items: start;
-              grid-template-columns: minmax(0, 1fr) var(--sched-w, 570px);
-              max-width: 1720px; margin: 0 auto; }
+              grid-template-columns: minmax(0, 1fr) var(--sched-w, 600px);
+              max-width: 1900px; margin: 0 auto; }
 .main-col { min-width: 0; }        /* lets the grid column actually shrink */
-@media (min-width: 1660px) { main.layout { --sched-w: 680px; } }
+@media (min-width: 1600px) { main.layout { --sched-w: 720px; } }
+@media (min-width: 1900px) { main.layout { --sched-w: 860px; } }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
 .filters, .content {
@@ -536,9 +537,12 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
                 ever appear for a very long day on a very short viewport. */
              border: 1px solid var(--line); border-radius: 12px;
              background: var(--panel); padding: 14px 15px; }
-.sp-head { display: flex; align-items: center; justify-content: space-between;
-           gap: 8px; margin-bottom: 2px; }
+.sp-head { display: flex; align-items: baseline; justify-content: space-between;
+           gap: 10px; margin-bottom: 6px; }
 .sp-head h2 { margin: 0; }
+.sp-head .hint { margin: 0; flex: 1 1 auto; }
+.schedpane .legend { margin-top: 6px; }
+.schedpane .movedbox { margin-top: 8px; padding-top: 7px; }
 .sp-close, .schedfab, .scrim { display: none; }
 
 /* The calendar has to survive a ~410px column: no min-width, columns free to
@@ -557,7 +561,7 @@ a.ev-body:hover { text-decoration: underline; text-underline-offset: 2px; }
   main.layout { grid-template-columns: minmax(0, 1fr); }
 
   .schedpane { position: fixed; inset: 0 0 0 auto; z-index: 70;
-               width: min(460px, 94vw); max-height: none; height: 100%;
+               width: min(860px, 96vw); max-height: none; height: 100%;
                border-radius: 0; border: 0; border-left: 1px solid var(--line);
                transform: translateX(100%); transition: transform .22s ease;
                box-shadow: -10px 0 34px rgba(0,0,0,.4); }
