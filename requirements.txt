@@ -1,0 +1,10 @@
+# Runtime dependencies for the deployed API (this is what Vercel installs).
+# Deliberately minimal: the crawler's dependencies (BeautifulSoup, requests,
+# openpyxl) are NOT needed to serve requests and live in requirements-ingest.txt.
+fastapi==0.141.1
+pydantic==2.13.4
+pydantic_core==2.46.4
+PyYAML==6.0.3
+
+# Only used to run the app locally; Vercel provides its own ASGI server.
+uvicorn==0.52.4

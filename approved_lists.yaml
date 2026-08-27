@@ -1,0 +1,207 @@
+# Approved course lists referenced by the MDE Elective Policy.
+# =============================================================================
+# GENERATED FILE -- do not hand-edit. Regenerate with:
+#
+#     python -m ingest.approved
+#
+# Source workbooks:
+#   MDE Approved Project-Based Electives.xlsx  -> project_based
+#   MDE Approved SEAS Courses.xlsx             -> seas_0_100, technical
+#
+# `technical` is the union of BOTH SEAS sheets: the 0-1000 sheet has its own
+# "Technical course fulfillment" column, so most 100-level courses count too.
+#
+# GSD project-based courses are listed by catalog NUMBER, not full code. The
+# spreadsheet gives only the number ("6317") and the subject prefix is not
+# reconstructed -- most of the list is not offered in any single term, so a
+# guessed prefix could not be verified. They match on school=GSD + catalog.
+# =============================================================================
+
+project_based:
+  verified: true
+  source: MDE Approved Project-Based Electives.xlsx
+  description: Rule 1a -- one of the two GSD courses must be project-based, for students without a physical
+    design background.
+  gsd_catalog_numbers:
+  - '2121'
+  - '2122'
+  - '2141'
+  - '2415'
+  - '5212'
+  - '6317'
+  - '7445'
+  - '4384'
+  - '6477'
+  - '6492'
+  - '5443'
+  - '6333'
+  - '2314'
+  - '2223'
+  - '2227'
+  - '2224'
+  - '5486'
+  - '5490'
+  - '6364'
+  - '6384'
+  - '2483'
+  - '6486'
+  - '6487'
+  - '5463'
+  - '2129'
+  - '2481'
+  - '2482'
+  - '6466'
+  - '5393'
+  - '5382'
+  - '6372'
+  - '2232'
+  - '2233'
+  - '2475'
+  - '5521'
+  - '6387'
+  - '6503'
+  - '6506'
+  - '6505'
+  - '6510'
+  - '6511'
+  - '6512'
+  - '6513'
+  - '2487'
+  - '2478'
+  codes: []
+technical:
+  verified: true
+  source: MDE Approved SEAS Courses.xlsx (both sheets)
+  description: Rule 2a-ii / 2b-ii -- at least one SEAS course must be technical. Applies to every student.
+  codes:
+  - COMPSCI1260
+  - COMPSCI1360
+  - COMPSCI1710
+  - COMPSCI50
+  - COMPSCI1000
+  - COMPSCI1650
+  - COMPSCI1090A
+  - COMPSCI1430
+  - APMTH10
+  - ENGSCI143
+  - ENGSCI152
+  - ENGSCI181
+  - ENGSCI192
+  - COMPSCI79
+  - COMPSCI1060
+  - COMPSCI1200
+  - COMPSCI1820
+  - COMPSCI1840
+  - ENGSCI159
+  - ESE115
+  - ENGSCI157
+  - COMPSCI51
+  - COMPSCI1090B
+  - COMPSCI1240
+  - COMPSCI1410
+  - COMPSCI1460
+  - COMPSCI1450
+  - COMPSCI1520
+  - COMPSCI1610
+  - COMPSCI1780
+  - COMPSCI1810
+  - COMPSCI1910
+  - APMTH22B
+  - APMTH50
+  - APMTH105
+  - APMTH107
+  - APMTH120
+  - BE124
+  - BE125
+  - BE128
+  - BE129
+  - BE130
+  - BE191
+  - ENGSCI50
+  - ENGSCI51
+  - ENGSCI112
+  - ENGSCI115
+  - ENGSCI120
+  - ENGSCI123
+  - ENGSCI128
+  - ENGSCI156
+  - ENGSCI170
+  - ENGSCI183
+  - ENGSCI190
+  - ENGSCI177
+  - COMPSCI279R
+  - APCOMP209A
+  - APCOMP209B
+  - COMPSCI243
+  - APMTH207
+  - APCOMP207
+  - APCOMP221
+  - APCOMP275
+  - COMPSCI288
+  - ENGSCI276
+  - ENGSCI259
+  - ENGSCI277
+  - ENGSCI230
+seas_0_100:
+  verified: true
+  source: MDE Approved SEAS Courses.xlsx -- '0-1000 Level Electives'
+  description: Rule 2b-i -- students WITHOUT a SEAS background may count an approved 0-100-level SEAS
+    course.
+  codes:
+  - COMPSCI1050
+  - COMPSCI1260
+  - COMPSCI1360
+  - COMPSCI1710
+  - COMPSCI50
+  - COMPSCI1000
+  - COMPSCI1650
+  - COMPSCI1090A
+  - COMPSCI1430
+  - APMTH10
+  - ENGSCI143
+  - ENGSCI152
+  - ENGSCI181
+  - ENGSCI192
+  - COMPSCI79
+  - COMPSCI1060
+  - COMPSCI1200
+  - COMPSCI1820
+  - COMPSCI1840
+  - ENGSCI159
+  - ESE115
+  - ENGSCI157
+  - ENGSCI138
+  - COMPSCI51
+  - COMPSCI1090B
+  - COMPSCI1240
+  - COMPSCI1410
+  - COMPSCI1460
+  - COMPSCI1450
+  - COMPSCI1520
+  - COMPSCI1610
+  - COMPSCI1780
+  - COMPSCI1810
+  - COMPSCI1910
+  - APMTH22B
+  - APMTH50
+  - APMTH105
+  - APMTH107
+  - APMTH120
+  - BE124
+  - BE125
+  - BE128
+  - BE129
+  - BE130
+  - BE191
+  - ENGSCI50
+  - ENGSCI51
+  - ENGSCI112
+  - ENGSCI115
+  - ENGSCI120
+  - ENGSCI123
+  - ENGSCI128
+  - ENGSCI156
+  - ENGSCI170
+  - ENGSCI183
+  - ENGSCI190
+  - ENGSCI177

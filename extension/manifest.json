@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "MDE Electives Planner Importer",
+  "version": "1.0.0",
+  "description": "Imports your my.harvard class schedule into MDE Electives Planner so elective search can route around your locked classes.",
+  "permissions": ["clipboardWrite"],
+  "host_permissions": [
+    "https://my.harvard.edu/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "//": "SECURITY: any page this runs on can ask the extension for the user's schedule. Keep this list to the planner's own origins. Replace the vercel.app entry with your real deployment URL, and delete it if you use a custom domain.",
+      "matches": [
+        "http://localhost:8000/*",
+        "http://127.0.0.1:8000/*",
+        "https://mde-electives-planner.vercel.app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "MDE Electives Planner"
+  }
+}

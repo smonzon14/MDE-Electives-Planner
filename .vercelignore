@@ -1,0 +1,20 @@
+# The deployed function needs the catalog, the policy YAML and server/ + ingest/.
+# Everything below is either huge, secret-adjacent, or only used to BUILD the
+# catalog (which happens in CI, never at request time).
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+extension/
+*.xlsx
+~$*
+data/*.log
+data/courses.deploy.db
+data/courses.sealing.tmp.db
+data/*.db-wal
+data/*.db-shm
+requirements-ingest.txt
+DEPLOY.md
+README.md
