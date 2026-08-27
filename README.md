@@ -81,6 +81,34 @@ Takes roughly 8–10 minutes at the default 0.7s politeness delay. Re-running is
 safe and idempotent: it upserts, and logs every meeting-time change into the
 `changes` table. That's what powers the "recently moved" feed during shopping week.
 
+### Adding a term
+
+**Nothing gates which terms are searchable.** The app's term dropdown is built
+from `SELECT term, COUNT(*) FROM courses GROUP BY term`, and every endpoint takes
+a `term`, so a term becomes selectable the moment it has been ingested. To add
+one, run the three ingest steps against it:
+
+```bash
+./.venv/bin/python -m ingest.crawl     --term "2027 Spring"
+./.venv/bin/python -m ingest.dates     --term "2027 Spring"
+./.venv/bin/python -m ingest.crosslist "2027 Spring"
+./.venv/bin/python -m ingest.seal --in-place        # before deploying
+```
+
+Cross-listing detection is per-term by nature — it groups courses that share an
+instructor and a meeting time — so it has to run once per term, not once overall.
+
+For a deployment, add the term to `TERMS` in
+`.github/workflows/refresh-catalog.yml` instead, so the daily job keeps it fresh.
+A term that is ingested once and never refreshed will quietly drift out of date.
+
+> **Your program semester is not the catalog term.** The elective count and the
+> core-course list come from `electives_by_term` / `cores_by_term`, keyed
+> `{year}-{season}` off **your profile** — not off the term you're browsing. A
+> Year 2 student with a Fall profile looking at Spring 2027 would be told they
+> need 3 electives when the answer is 2. The app detects the disagreement and
+> offers to fix it rather than guessing which you meant.
+
 ## 2. Run the app
 
 ```bash
