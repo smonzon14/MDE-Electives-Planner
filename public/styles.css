@@ -328,3 +328,25 @@ button.danger:hover { border-color: var(--bad); }
              border: 1px solid var(--line); border-radius: 7px;
              background: var(--panel); color: var(--ink); }
 .filelabel:hover { border-color: var(--muted); }
+
+/* ---- catalog meta: one plain-language line + an info dot ---- */
+.metawrap { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+
+.infodot { width: 15px; height: 15px; padding: 0; flex: 0 0 auto;
+           border: 1px solid var(--line); border-radius: 50%;
+           background: var(--panel); color: var(--muted);
+           font: 600 10px/1 ui-serif, Georgia, serif; font-style: italic;
+           display: inline-flex; align-items: center; justify-content: center;
+           cursor: help; transition: color .12s, border-color .12s; }
+.infodot:hover, .infodot[aria-expanded="true"] { color: var(--ink); border-color: var(--muted); }
+
+.infopop { position: absolute; top: calc(100% + 7px); left: 0; z-index: 45;
+           width: max-content; max-width: min(330px, calc(100vw - 32px));
+           padding: 9px 11px;
+           background: var(--panel); border: 1px solid var(--line);
+           border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.22);
+           font-size: 12px; line-height: 1.45; cursor: default; }
+.infopop div { display: flex; justify-content: space-between; gap: 14px; }
+.infopop div + div { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.infopop b { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.infopop span { color: var(--muted); text-align: right; white-space: nowrap; }
