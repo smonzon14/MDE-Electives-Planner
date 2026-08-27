@@ -48,6 +48,10 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # VERCEL_DEPLOY_HOOK is scoped to this environment, not to the repository.
+    # Without this line secrets.VERCEL_DEPLOY_HOOK resolves to empty and the
+    # refresh publishes a new catalog that never gets deployed.
+    environment: Production
 
     steps:
       # Full history: the rebase in the final step needs a merge base, which a
