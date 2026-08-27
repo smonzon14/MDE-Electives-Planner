@@ -175,14 +175,14 @@ main.layout { display: grid; gap: 18px; align-items: start;
 .r-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .r-code { font-weight: 700; font-size: 12px; color: var(--crimson); }
 .r-title { font-weight: 600; }
-.r-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.r-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
 /* Badges get their own row. They used to share the meta line with a
    float: right button, so a course with several badges ran straight into
    "Add to plan". Now the badges wrap inside their own box and the button sits
    in a fixed cell beside it, so they can never collide however many there are. */
 .r-pills { display: flex; flex-wrap: wrap; align-items: flex-start;
-           gap: 6px 10px; margin-top: 6px; }
+           gap: 6px 10px; margin-top: 5px; }
 .r-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
             flex: 1 1 200px; min-width: 0; }
 .r-actions { flex: 0 0 auto; margin-left: auto; }

@@ -512,10 +512,6 @@ function courseCard(c, inPlan) {
              ${extLink(c, esc(c.title), "r-title")}</div>
         <div>${fit}</div>
       </div>
-      <div class="r-meta">
-        ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
-        ${c.instructors.length ? " · " + esc(c.instructors.join(", ")) : ""}
-      </div>
       <div class="r-pills">
         <div class="r-badges">
           <span class="badge level" title="${esc(pol.level_label || "")}">${esc(pol.level_label || "")}</span>
@@ -526,6 +522,10 @@ function courseCard(c, inPlan) {
             : `<button class="pin ghost" data-plan="${esc(c.key)}">${
                 inPlan ? "Remove" : "Add to plan"}</button>`}
         </div>
+      </div>
+      <div class="r-meta">
+        ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
+        ${c.instructors.length ? " · " + esc(c.instructors.join(", ")) : ""}
       </div>
       ${warns}
     </li>`;
