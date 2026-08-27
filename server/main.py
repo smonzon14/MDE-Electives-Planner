@@ -39,7 +39,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import DAY_NAMES, DEFAULT_TERM, ROOT
+from config import DAY_NAMES, DB_PATH, DEFAULT_TERM, ROOT
 from server.conflicts import Block, conflicts_with, find_combinations, free_windows
 from server.policy import Policy, StudentProfile
 from ingest.crosslist import load_map
@@ -264,7 +264,14 @@ def health():
         raise
     except Exception as e:
         raise HTTPException(503, f"catalog unavailable: {type(e).__name__}")
-    return {"ok": True, "courses": n, "policy_version": POLICY.as_dict()["policy_version"]}
+    # Build-time probe: reports whether a file written by the Vercel build
+    # command survives into the function bundle. Temporary.
+    probe = ROOT / "data" / "BUILD_PROBE"
+    db_file = Path(str(DB_PATH))
+    return {"ok": True, "courses": n,
+            "policy_version": POLICY.as_dict()["policy_version"],
+            "build_probe": probe.read_text().split() if probe.exists() else None,
+            "db_bytes": db_file.stat().st_size if db_file.exists() else None}
 
 
 @app.get("/api/meta")
