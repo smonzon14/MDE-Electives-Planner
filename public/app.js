@@ -46,6 +46,9 @@ const extLink = (c, label, cls = "") => {
 };
 
 const term = () => $("#term").value;
+// "2027 Spring" -> "Spring". The catalog term and the profile's semester are
+// separate things, and the policy keys off the profile -- see renderSeasonWarn.
+const termSeason = () => term().trim().split(/\s+/).pop();
 const buffer = () => parseInt($("#buffer").value, 10) || 0;
 
 /** The three pieces of personal state every endpoint needs. */
@@ -299,6 +302,37 @@ function renderProfile() {
     : "";
   $("#pick").innerHTML = [1, 2, 3, 4].map((v) =>
     `<option ${v === n ? "selected" : ""}>${v}</option>`).join("");
+  renderSeasonWarn();
+}
+
+/** Flag a profile semester that disagrees with the term being browsed.
+ *
+ * electives_by_term and cores_by_term are keyed "{year}-{season}" off the
+ * PROFILE, not off the selected catalog term. So a Year 2 student browsing
+ * Spring 2027 with a Fall profile is told they need 3 electives when the
+ * answer is 2, and is shown the wrong core courses. This was invisible while
+ * only one term had been ingested; with two, it needs saying out loud rather
+ * than silently guessing which one the student meant.
+ */
+function renderSeasonWarn() {
+  const p = Store.getProfile();
+  const ts = termSeason();
+  const box = $("#seasonWarn");
+  const mismatch = p && (ts === "Fall" || ts === "Spring") && p.season !== ts;
+  box.hidden = !mismatch;
+  if (!mismatch) return;
+  $("#seasonWarnText").textContent =
+    `You're browsing ${term()}, but your background says ${p.season}. ` +
+    `The elective count and core courses shown are for your ${p.season} semester.`;
+  $("#seasonFix").textContent = `Switch my background to ${ts}`;
+}
+
+async function applySeasonFix() {
+  const p = Store.getProfile();
+  if (!p) return;
+  Store.setProfile({ ...p, season: termSeason() });
+  renderProfile();
+  await Promise.all([search(), loadPlan()]);
 }
 
 function openProfile() {
@@ -956,6 +990,8 @@ $("#metaInfo").addEventListener("click", (e) => {
 $("#metaInfo").addEventListener("mouseenter", () => toggleMeta(true));
 $(".metawrap").addEventListener("mouseleave", () => { if (!metaPinned) toggleMeta(false); });
 document.addEventListener("click", () => { metaPinned = false; toggleMeta(false); });
+
+$("#seasonFix").addEventListener("click", applySeasonFix);
 
 $("#welcomeSkip").addEventListener("click", dismissWelcome);
 $("#welcomeImport").addEventListener("click", () => { dismissWelcome(); openImport(); });
