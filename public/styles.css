@@ -40,7 +40,12 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
   border-bottom: 1px solid var(--line); flex-wrap: wrap;
 }
 .brand { display: flex; align-items: center; gap: 12px; }
-.mark { width: 30px; height: 30px; border-radius: 8px; background: var(--crimson); flex: 0 0 auto; }
+.mark {
+  width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+  /* The wordmark is already a full-bleed crimson square, so the flat colour
+     stays behind it as a fallback if the image ever fails to load. */
+  background: var(--crimson) url("/mde_logo.png") center / cover no-repeat;
+}
 .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .topbar-controls { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
 .topbar-controls label, .f {
