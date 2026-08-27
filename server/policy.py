@@ -335,6 +335,18 @@ class Policy:
                 f"Required MDE core ({core.get('name', code)}) -- not an elective, "
                 f"so it does not count toward the {self.p.get('electives_total', 9)}.")
             return el
+        # A waived or already-completed CS50 is not a course the student will
+        # take, so it cannot fill a SEAS elective slot. Rule 2 is a minimum of
+        # two SEAS courses and nothing in the policy reduces that for a waiver.
+        # validate_plan already skipped CS50 when tallying a plan, but evaluate()
+        # still reported satisfies=[seas], so a petitioned CS50 was badged as a
+        # SEAS course and matched the "requirement it satisfies: SEAS" filter.
+        if cs50 and not profile.cs50_outstanding:
+            el.counts_at_all = False
+            el.warnings.append(
+                f"CS50 already satisfied ({profile.cs50_status}) -- not a course you "
+                f"still take, so it does not count toward the SEAS minimum.")
+            return el
         if seas_caveat:
             el.warnings.append(f"{course.get('subject')}: {seas_caveat}")
 
@@ -352,16 +364,16 @@ class Policy:
                 and school not in self.outside_schools and level < 100):
             if norm_code(code) in exceptions or cs50 or on_approved_low:
                 if cs50:
-                    if profile.cs50_outstanding and profile.is_first_semester:
+                    # A waived CS50 returned early above, so reaching here means
+                    # the student still owes the course.
+                    if profile.is_first_semester:
                         el.warnings.append(
                             "CS50 is required as an elective in your first semester "
                             "unless waived by online certificate or petition.")
-                    elif profile.cs50_outstanding:
+                    else:
                         el.warnings.append(
                             "CS50 was due in your first semester -- confirm your standing "
                             "with the program office.")
-                    else:
-                        el.warnings.append(f"CS50 already satisfied ({profile.cs50_status}).")
                 elif on_approved_low:
                     el.warnings.append(
                         "Below the 100 level, but on the MDE approved 0-100-level SEAS list "
