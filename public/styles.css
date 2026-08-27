@@ -355,3 +355,29 @@ button.danger:hover { border-color: var(--bad); }
 .infopop div + div { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .infopop b { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .infopop span { color: var(--muted); text-align: right; white-space: nowrap; }
+
+/* ---- first-run welcome ---- */
+/* Heavier than a normal task modal: this one has to read as "start here", not
+   as a dialog you can look past. The blur also stops the course grid behind it
+   from competing for attention. */
+.modal-heavy { background: rgba(0,0,0,.72); backdrop-filter: blur(3px); }
+.modal-heavy .modal-box { max-width: 500px; }
+
+.wsteps { margin: 14px 0 0; padding: 0; list-style: none; counter-reset: wstep; }
+.wsteps li { position: relative; padding: 0 0 0 30px; margin-bottom: 12px;
+             font-size: 13px; line-height: 1.5; counter-increment: wstep; }
+.wsteps li::before { content: counter(wstep); position: absolute; left: 0; top: 0;
+                     width: 20px; height: 20px; border-radius: 50%;
+                     background: var(--crimson); color: #fff;
+                     font-size: 11px; font-weight: 700;
+                     display: flex; align-items: center; justify-content: center; }
+.wsteps b { color: var(--ink); display: block; }
+.wsteps span { color: var(--muted); }
+
+.wprivacy { margin: 16px 0 0; padding: 9px 11px; border-radius: 8px;
+            background: rgba(21,115,71,.09); border: 1px solid rgba(21,115,71,.3);
+            font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+/* The banner's buttons are hidden individually as each step is completed, so
+   the row must not keep a gap for a button that is gone. */
+.fr-actions:empty { display: none; }

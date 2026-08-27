@@ -141,14 +141,62 @@ async function boot() {
   await refreshAll();
 
   // First run: nudge toward the two things that make the tool useful.
-  if (Store.isEmpty()) $("#firstRun").hidden = false;
+  renderOnboarding();
+  maybeWelcome();
 }
 
 async function refreshAll() {
   renderProfile();
+  renderOnboarding();
   loadLocked();
   await Promise.all([loadChanges(), search()]);
   await loadPlan();
+}
+
+// ------------------------------------------------------------- onboarding ---
+//
+// Two things gate usefulness: an imported schedule (nothing to route around
+// without it) and a profile (eligibility is wrong without it). The welcome
+// modal makes that unmissable once; the banner is the standing reminder, so the
+// modal never has to appear twice.
+
+function onboardingTodo() {
+  return {
+    needsImport: !Store.hasImported(term()),
+    needsProfile: !Store.getProfile(),
+  };
+}
+
+/** Show/hide the reminder banner from state. Never call `.hidden` directly. */
+function renderOnboarding() {
+  const { needsImport, needsProfile } = onboardingTodo();
+  const banner = $("#firstRun");
+  banner.hidden = !(needsImport || needsProfile);
+
+  // Tailor the banner: once one step is done, stop asking for it.
+  $("#firstRunImport").hidden = !needsImport;
+  $("#firstRunProfile").hidden = !needsProfile;
+  $("#firstRunText").innerHTML = needsImport && needsProfile
+    ? `<b>Two things make this useful.</b> Import your enrolled classes so search
+       can route around them, and set your background so eligibility is accurate.
+       Everything stays in this browser — there is no account and nothing is uploaded.`
+    : needsImport
+      ? `<b>Import your enrolled classes</b> so search can route around them.
+         Without them, every course looks like it fits.`
+      : `<b>Set your background.</b> The MDE rules branch on it, so eligibility
+         is a guess until you do.`;
+}
+
+/** Open the welcome modal on load, at most once per browser. */
+function maybeWelcome() {
+  if (!onboardingTodo().needsImport) return;
+  if (Store.getSetting("welcomeSeen", false)) return;
+  $("#welcomeModal").hidden = false;
+}
+
+function dismissWelcome() {
+  $("#welcomeModal").hidden = true;
+  Store.setSetting("welcomeSeen", true);
 }
 
 // ------------------------------------------------------------ catalog meta ---
@@ -277,7 +325,7 @@ async function saveProfile() {
     completed_codes: $("#pCompleted").value.split(",").map((s) => s.trim()).filter(Boolean),
   });
   $("#profileModal").hidden = true;
-  $("#firstRun").hidden = true;
+  renderOnboarding();
   renderProfile();
   await Promise.all([search(), loadPlan()]);
 }
@@ -692,7 +740,7 @@ async function ingestCalendar(items, mode) {
   const el = $("#impResult");
   el.innerHTML = bits.map((b) => `<div>${b}</div>`).join("");
   el.hidden = false;
-  $("#firstRun").hidden = true;
+  renderOnboarding();
   return { imported };
 }
 
@@ -867,7 +915,7 @@ async function saveBlock() {
   }
 
   $("#blockModal").hidden = true;
-  $("#firstRun").hidden = true;
+  renderOnboarding();
   loadLocked();
   await Promise.all([loadPlan(), refreshResults()]);
 }
@@ -909,6 +957,10 @@ $("#metaInfo").addEventListener("mouseenter", () => toggleMeta(true));
 $(".metawrap").addEventListener("mouseleave", () => { if (!metaPinned) toggleMeta(false); });
 document.addEventListener("click", () => { metaPinned = false; toggleMeta(false); });
 
+$("#welcomeSkip").addEventListener("click", dismissWelcome);
+$("#welcomeImport").addEventListener("click", () => { dismissWelcome(); openImport(); });
+$("#welcomeProfile").addEventListener("click", () => { dismissWelcome(); openProfile(); });
+
 $("#importBtn").addEventListener("click", openImport);
 $("#firstRunImport").addEventListener("click", openImport);
 $("#firstRunProfile").addEventListener("click", openProfile);
@@ -936,10 +988,13 @@ $("#resetBtn").addEventListener("click", async () => {
 });
 
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => {
-  if (e.target === m) m.hidden = true;      // click the backdrop to dismiss
+  if (e.target !== m) return;               // click the backdrop to dismiss
+  if (m.id === "welcomeModal") dismissWelcome();
+  else m.hidden = true;
 }));
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
+  if (!$("#welcomeModal").hidden) dismissWelcome();
   $$(".modal").forEach((m) => { m.hidden = true; });
   metaPinned = false;
   toggleMeta(false);
