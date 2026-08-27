@@ -38,6 +38,9 @@
         <option value="30">30 min</option>
       </select>
     </label>
+    <button id="fbProfile" class="profilechip" title="Eligibility depends on your background">
+      <span id="fbProfileText">background not set</span>
+    </button>
     <button id="importBtn" class="primary">Import my classes</button>
   </div>
 </header>
@@ -53,9 +56,95 @@
   </div>
 </div>
 
-<main>
-  <aside class="filters">
-    <div class="profile-card">
+<main class="single">
+  <nav class="tabs">
+    <button class="tab active" data-tab="grid">My schedule</button>
+    <button class="tab" data-tab="list">Course search</button>
+    <button class="tab" data-tab="combos">Combinations</button>
+    <button class="tab" data-tab="plan">My plan <span id="planCount" class="pill">0</span></button>
+  </nav>
+
+  <!-- Shared by Course search AND Combinations: both send the same filters to
+       the server, so they must not drift apart. Hidden on the other tabs. -->
+  <div id="filterBar" class="filterbar" hidden>
+    <div class="fb-row">
+      <label class="fb-field grow">Search
+        <input id="q" placeholder="title, code, instructor…">
+      </label>
+      <label class="fb-field">Requirement it satisfies
+        <select id="requirement"><option value="">Any requirement</option></select>
+      </label>
+      <label class="fb-field">School
+        <select id="school"><option value="">All schools</option></select>
+      </label>
+    </div>
+    <div class="fb-row checks">
+      <label class="check"><input type="checkbox" id="freeOnly" checked>
+        Only courses that fit my schedule</label>
+      <label class="check"><input type="checkbox" id="fProjectBased">
+        Project-based only <span class="rule">rule 1a</span></label>
+      <label class="check"><input type="checkbox" id="fTechnical">
+        Technical only <span class="rule">rule 2</span></label>
+      <label class="check"><input type="checkbox" id="includeNoCredit">
+        Counts toward nothing</label>
+      <label class="check"><input type="checkbox" id="includeTba">
+        Include TBA / async</label>
+    </div>
+  </div>
+
+  <div id="tab-grid" class="tabpanel active">
+    <div class="gridhead">
+      <p class="hint">Your enrolled classes and anything you've added. Click an
+        empty slot to add a block; hit <b>×</b> on a block to remove it.</p>
+    </div>
+    <div class="grid-wrap">
+      <div id="weekGrid" class="week-grid"></div>
+      <button id="gridAddBlock" class="fab" title="Add a block by hand">+ Block</button>
+    </div>
+    <p class="hint legend">
+      <span class="chip locked"></span> locked
+      <span class="chip preview"></span> preview (hover a course)
+      <span class="chip pinned"></span> in my plan
+    </p>
+    <div id="lockedOverflow" class="overflow" hidden></div>
+
+    <h3 class="sec">Times that moved recently</h3>
+    <p class="hint">Meeting times change daily during shopping week.</p>
+    <ul id="changeList" class="change-list wide"></ul>
+  </div>
+
+  <div id="tab-list" class="tabpanel">
+    <div class="result-head">
+      <span id="resultCount">—</span>
+      <button id="loadMore" class="ghost" hidden>Load more</button>
+    </div>
+    <div id="tbaNote" class="tbanote" hidden></div>
+    <ul id="results" class="results"></ul>
+  </div>
+
+  <div id="tab-combos" class="tabpanel">
+    <div class="combo-controls">
+      <label>Electives to fill<select id="pick"></select></label>
+      <button id="findCombos" class="primary">Find combinations</button>
+    </div>
+    <p class="hint">Every way to fill these slots that fits around your locked
+      classes and doesn't collide with itself. Each slot filters independently —
+      "a project-based GSD course <b>and</b> a technical SEAS course" is two
+      different searches, not one.</p>
+
+    <div id="slotCards" class="slotcards"></div>
+
+    <div id="comboSummary" class="hint" hidden></div>
+    <div id="combos"></div>
+    <div id="comboPager" class="pager" hidden>
+      <button id="comboPrev" class="ghost">← Previous</button>
+      <span id="comboRange"></span>
+      <button id="comboNext" class="ghost">Next →</button>
+    </div>
+  </div>
+
+  <div id="tab-plan" class="tabpanel">
+    <div class="profile-card wide">
       <div class="pc-head">
         <h2>My background</h2>
         <button id="editProfile" class="ghost tiny">Edit</button>
@@ -68,42 +157,11 @@
       </div>
     </div>
 
-    <hr>
-    <h2>Filters</h2>
+    <div id="planReport"></div>
+    <h3 class="sec">Courses in my plan</h3>
+    <ul id="planList" class="results"></ul>
 
-    <label class="f">Search<input id="q" placeholder="title, code, instructor…"></label>
-    <label class="f">Requirement it satisfies
-      <select id="requirement"><option value="">Any requirement</option></select>
-    </label>
-    <label class="f">School<select id="school"><option value="">All schools</option></select></label>
-
-    <label class="check"><input type="checkbox" id="freeOnly" checked>
-      Only courses that fit my schedule</label>
-    <label class="check"><input type="checkbox" id="fProjectBased">
-      Project-based only <span class="rule">rule 1a</span></label>
-
-    <label class="check"><input type="checkbox" id="fTechnical">
-      Technical only <span class="rule">rule 2</span></label>
-
-    <label class="check"><input type="checkbox" id="includeNoCredit">
-      Also show courses that count toward nothing</label>
-    <label class="check"><input type="checkbox" id="includeTba">
-      Include TBA / async (no fixed time)</label>
-
-    <hr>
-    <div class="pc-head">
-      <h2>My locked schedule</h2>
-      <button id="addBlockBtn" class="ghost tiny">+ Block</button>
-    </div>
-    <p class="hint">Imported from my.harvard, plus anything you add by hand.</p>
-    <ul id="lockedList" class="locked-list"></ul>
-
-    <hr>
-    <h2>Recently moved</h2>
-    <ul id="changeList" class="change-list"></ul>
-
-    <hr>
-    <h2>My data</h2>
+    <h3 class="sec">My data</h3>
     <p class="hint">Your plan lives only in this browser. There is no account,
       so use a backup file to move it to another computer.</p>
     <div class="datarow">
@@ -113,50 +171,7 @@
       </label>
       <button id="resetBtn" class="ghost tiny danger">Clear</button>
     </div>
-  </aside>
-
-  <section class="content">
-    <nav class="tabs">
-      <button class="tab active" data-tab="grid">Week grid</button>
-      <button class="tab" data-tab="list">Course list</button>
-      <button class="tab" data-tab="combos">Combinations</button>
-      <button class="tab" data-tab="plan">My plan <span id="planCount" class="pill">0</span></button>
-    </nav>
-
-    <div id="tab-grid" class="tabpanel active">
-      <div class="grid-wrap"><div id="weekGrid" class="week-grid"></div></div>
-      <p class="hint legend">
-        <span class="chip locked"></span> locked
-        <span class="chip preview"></span> preview (hover a course)
-        <span class="chip pinned"></span> in my plan
-      </p>
-    </div>
-
-    <div id="tab-list" class="tabpanel">
-      <div class="result-head">
-        <span id="resultCount">—</span>
-        <button id="loadMore" class="ghost" hidden>Load more</button>
-      </div>
-      <div id="tbaNote" class="tbanote" hidden></div>
-      <ul id="results" class="results"></ul>
-    </div>
-
-    <div id="tab-combos" class="tabpanel">
-      <div class="combo-controls">
-        <label>Pick<select id="pick"></select></label>
-        <button id="findCombos">Find valid combinations</button>
-      </div>
-      <p class="hint">Every set of electives that fits around your locked classes,
-        doesn't collide with itself, and can count for credit under your background.</p>
-      <div id="combos"></div>
-    </div>
-
-    <div id="tab-plan" class="tabpanel">
-      <div id="planReport"></div>
-      <h3 class="sec">Courses in my plan</h3>
-      <ul id="planList" class="results"></ul>
-    </div>
-  </section>
+  </div>
 </main>
 
 <!-- First-run welcome. Opens on load until a schedule has been imported;

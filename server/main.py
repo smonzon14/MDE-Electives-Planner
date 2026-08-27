@@ -43,7 +43,8 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import DAY_NAMES, DB_PATH, DEFAULT_TERM, ROOT
-from server.conflicts import Block, conflicts_with, find_combinations, free_windows
+from server.conflicts import (Block, conflicts_with, find_slot_combinations,
+                              free_windows)
 from server.policy import Policy, StudentProfile
 from ingest.crosslist import load_map
 from ingest.db import connect_readonly
@@ -760,68 +761,120 @@ def plan_view(inp: PlanIn):
 
 # ---------------------------------------------------------- combinations ---
 
-class CombosIn(PersonalIn):
-    term: str = DEFAULT_TERM
+class SlotIn(BaseModel):
+    """Filters for one elective slot.
+
+    Slots are independent: "a project-based GSD course AND a technical SEAS
+    course" is two different candidate pools, not one pool chosen from twice.
+    """
     q: str = Field("", max_length=200)
     school: str = ""
     requirement: str = ""
-    pick: int = Field(0, ge=0, le=6)   # 0 = use the profile's electives-this-term
-    buffer_min: int = Field(0, ge=0, le=120)
-    include_no_credit: bool = False
     project_based: bool = False
     technical: bool = False
-    limit: int = Field(50, ge=1, le=200)
+    include_no_credit: bool = False
+    label: str = ""
 
 
-@app.post("/api/combinations")
-def combinations(inp: CombosIn):
-    conn = db()
-    profile = inp.profile.to_profile()
-    xl = crosslists(conn, inp.term)
-    courses = _course_rows(conn, inp.term, {"q": inp.q, "school": inp.school})
+MAX_SLOTS = 4
+
+
+class CombosIn(PersonalIn):
+    term: str = DEFAULT_TERM
+    slots: list[SlotIn] = Field(default_factory=list, max_length=MAX_SLOTS)
+    buffer_min: int = Field(0, ge=0, le=120)
+    limit: int = Field(20, ge=1, le=100)
+    offset: int = Field(0, ge=0)
+    # Ceiling on enumeration, not on what is returned. Two unfiltered slots is
+    # ~2.3M pairs, so results are always a bounded, anchor-spread sample.
+    cap: int = Field(2000, ge=50, le=5000)
+
+    # --- legacy flat form, kept so an old client keeps working ---
+    pick: int = Field(0, ge=0, le=MAX_SLOTS)
+    q: str = Field("", max_length=200)
+    school: str = ""
+    requirement: str = ""
+    project_based: bool = False
+    technical: bool = False
+    include_no_credit: bool = False
+
+    def resolved_slots(self, default_pick: int) -> list[SlotIn]:
+        if self.slots:
+            return list(self.slots)
+        n = self.pick or default_pick
+        flat = SlotIn(q=self.q, school=self.school, requirement=self.requirement,
+                      project_based=self.project_based, technical=self.technical,
+                      include_no_credit=self.include_no_credit)
+        return [flat.model_copy() for _ in range(max(1, n))]
+
+
+def _slot_pool(conn, term: str, slot: SlotIn, profile: StudentProfile,
+               xl: dict) -> tuple[dict[str, list[Block]], dict[str, dict]]:
+    """Candidate courses for one slot, as {key: blocks} plus their metadata."""
+    courses = _course_rows(conn, term, {"q": slot.q, "school": slot.school})
     _attach_meetings(conn, courses)
-    locked = [l.to_block() for l in inp.locked]
-
-    pick = inp.pick or POLICY.electives_this_term(profile)
-
-    pool, meta_by_key = {}, {}
+    pool: dict[str, list[Block]] = {}
+    meta: dict[str, dict] = {}
     for c in courses:
         if not c["meetings"]:
             continue  # TBA fits everything and would flood the results
         el = POLICY.evaluate(c, profile, xl.get(c["key"]))
-        if inp.project_based and not el.is_project_based:
+        if slot.project_based and not el.is_project_based:
             continue
-        if inp.technical and not el.is_technical:
+        if slot.technical and not el.is_technical:
             continue
         satisfied = el.satisfied_ids()
-        if inp.requirement and inp.requirement != "any":
-            if inp.requirement not in satisfied:
+        if slot.requirement and slot.requirement != "any":
+            if slot.requirement not in satisfied:
                 continue
-        elif not satisfied and not inp.include_no_credit:
+        elif not satisfied and not slot.include_no_credit:
             continue
         pool[c["key"]] = _blocks(c["meetings"], c["title"])
         c["policy"] = el.to_dict()
-        meta_by_key[c["key"]] = c
+        meta[c["key"]] = c
+    return pool, meta
+
+
+@app.post("/api/combinations")
+def combinations(inp: CombosIn):
+    """Every set of electives that fits, one course drawn from each slot."""
+    conn = db()
+    profile = inp.profile.to_profile()
+    xl = crosslists(conn, inp.term)
+    slots = inp.resolved_slots(POLICY.electives_this_term(profile))
+    locked = [l.to_block() for l in inp.locked]
+
+    pools: list[dict[str, list[Block]]] = []
+    meta_by_key: dict[str, dict] = {}
+    for slot in slots:
+        pool, meta = _slot_pool(conn, inp.term, slot, profile, xl)
+        pools.append(pool)
+        meta_by_key.update(meta)
     conn.close()
 
-    combos = find_combinations(pool, locked, pick=pick,
-                               buffer_min=inp.buffer_min, limit=inp.limit)
+    combos, truncated = find_slot_combinations(
+        pools, locked, buffer_min=inp.buffer_min, cap=inp.cap)
+
+    page = combos[inp.offset : inp.offset + inp.limit]
+
+    def card(key: str) -> dict:
+        c = meta_by_key[key]
+        return {"key": key, "code": c["code"], "section": c["section"],
+                "title": c["title"], "school": c["school"],
+                "subject": c["subject"], "catalog": c["catalog"],
+                "meetings": c["meetings"], "detail_url": c["detail_url"],
+                "policy": c["policy"]}
+
     return {
-        "count": len(combos),
-        "pick": pick,
-        "pool_size": len(pool),
+        "total": len(combos),
+        "truncated": truncated,
+        "offset": inp.offset,
+        "limit": inp.limit,
+        "slots": [{"label": s.label, "pool_size": len(p)}
+                  for s, p in zip(slots, pools)],
         "profile": profile.to_dict(),
-        "combinations": [
-            [
-                {"key": k, "code": meta_by_key[k]["code"],
-                 "section": meta_by_key[k]["section"], "title": meta_by_key[k]["title"],
-                 "school": meta_by_key[k]["school"], "meetings": meta_by_key[k]["meetings"],
-                 "detail_url": meta_by_key[k]["detail_url"],
-                 "policy": meta_by_key[k]["policy"]}
-                for k in combo
-            ]
-            for combo in combos
-        ],
+        "electives_this_term": POLICY.electives_this_term(profile),
+        "combinations": [[card(k) for k in combo] for combo in page],
     }
 
 

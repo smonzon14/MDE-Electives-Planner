@@ -14,9 +14,17 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const GRID_DAYS = [1, 2, 3, 4, 5];
-const DAY_START = 8 * 60, DAY_END = 22 * 60;
+// Weekdays always show; Sat/Sun appear only when something is scheduled there.
+// The window is 8am-10pm unless a block falls outside it. This is what makes it
+// safe to delete the sidebar list: with fixed Mon-Fri 8-22 bounds, a Saturday
+// club meeting or a 7am commute block would be invisible AND unremovable.
+const BASE_DAYS = [1, 2, 3, 4, 5];
+const BASE_START = 8 * 60, BASE_END = 22 * 60;
 const SLOT = 30, PX_PER_MIN = 1;
+const NEW_BLOCK_MIN = 90;       // default length for a click-to-create block
+
+let gridDays = [...BASE_DAYS];
+let dayStart = BASE_START, dayEnd = BASE_END;
 
 const CALENDAR_URL = "https://my.harvard.edu/calendar/load/";
 
@@ -26,6 +34,8 @@ const state = {
   preview: null, offset: 0, limit: 100, total: 0,
   electivesThisTerm: 2,
   extension: false,        // set true when the extension announces itself
+  slots: [],               // per-slot combination filters
+  comboOffset: 0, comboLimit: 20, comboTotal: 0, comboRan: false,
 };
 
 const fmt = (m) => {
@@ -277,10 +287,28 @@ function electivesThisTerm() {
   return map[`${p?.year ?? 1}-${p?.season ?? "Fall"}`] ?? 2;
 }
 
+const FILTER_TABS = new Set(["list"]);
+
+function renderFilterBarVisibility() {
+  const active = document.querySelector(".tab.active")?.dataset.tab;
+  $("#filterBar").hidden = !FILTER_TABS.has(active);
+}
+
+function renderProfileChip() {
+  const p = Store.getProfile();
+  $("#fbProfileText").textContent = p
+    ? `Year ${p.year} ${p.season}` +
+      (p.seas_background ? ` · SEAS${p.seas_areas.length ? " " + p.seas_areas.join("/") : ""}` : "") +
+      (p.physical_design_background ? " · design" : "")
+    : "background not set";
+  $("#fbProfile").classList.toggle("unset", !p);
+}
+
 function renderProfile() {
   const p = Store.getProfile();
   const box = $("#profileSummary");
   state.electivesThisTerm = electivesThisTerm();
+  renderProfileChip();
 
   if (!p) {
     box.innerHTML = `<span class="muted">Not set — results assume Year 1 Fall with
@@ -368,36 +396,7 @@ async function saveProfile() {
 
 function loadLocked() {
   state.locked = Store.locked(term());
-  renderLocked();
   renderGrid();
-}
-
-function renderLocked() {
-  const ul = $("#lockedList");
-  if (!state.locked.length) {
-    ul.innerHTML = `<li style="background:none;color:var(--muted);font-size:12px">
-      Nothing locked yet. <b>Import my classes</b> above, or add a block by hand.</li>`;
-    return;
-  }
-  ul.innerHTML = state.locked.map((i) => {
-    const custom = i.source === "manual";
-    const tag = custom
-      ? `<span class="tag">${i.category === "course" ? "outside course" : "added"}</span> ` : "";
-    const dates = i.start_date && custom
-      ? `<br><span class="tag">${esc(i.start_date)} → ${esc(i.end_date || "")}</span>` : "";
-    const days = (i.days || DAYS.filter((_, d) => i.day_mask & (1 << d)));
-    return `<li class="${custom ? "custom" : ""}"><span>${tag}${
-      extLink(i, esc(i.title || i.code))}
-      <br><small style="color:var(--muted)">
-      ${days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(i.start_min)}–${fmt(i.end_min)}
-      </small>${dates}</span>
-      <button class="rm" data-id="${esc(i.id)}" title="Remove">✕</button></li>`;
-  }).join("");
-  $$("#lockedList .rm").forEach((b) => b.addEventListener("click", async () => {
-    Store.removeLocked(term(), b.dataset.id);
-    loadLocked();
-    await Promise.all([refreshResults(), loadPlan()]);
-  }));
 }
 
 async function loadChanges() {
@@ -649,99 +648,296 @@ function renderReport(r) {
 
 // ------------------------------------------------------------- week grid ---
 
+/** Everything drawn on the grid, with what removing it should do. */
+function gridItems() {
+  const items = [];
+  for (const i of state.locked) {
+    items.push({
+      kind: "locked", label: i.title || i.code, url: courseUrl(i),
+      removeAttr: `data-rm-locked="${esc(i.id)}"`,
+      meetings: [{ day_mask: i.day_mask, start_min: i.start_min, end_min: i.end_min }],
+      detail: i.start_date && i.source === "manual"
+        ? `${i.start_date} → ${i.end_date || ""}` : "",
+    });
+  }
+  state.plan.forEach((c) => {
+    // Enrolled courses already appear as locked blocks; drawing them again as
+    // plan candidates would paint purple over the crimson and misrepresent them.
+    if (c.enrolled) return;
+    items.push({
+      kind: "pinned", label: `${c.subject} ${c.catalog}`, url: courseUrl(c),
+      removeAttr: `data-rm-plan="${esc(c.key)}"`, meetings: c.meetings, detail: "",
+    });
+  });
+  return items;
+}
+
+function computeGridBounds(items) {
+  const days = new Set(BASE_DAYS);
+  let lo = BASE_START, hi = BASE_END;
+  for (const it of items) {
+    for (const m of it.meetings) {
+      for (let d = 0; d < 7; d++) if (m.day_mask & (1 << d)) days.add(d);
+      if (m.start_min < lo) lo = Math.floor(m.start_min / 60) * 60;
+      if (m.end_min > hi) hi = Math.ceil(m.end_min / 60) * 60;
+    }
+  }
+  gridDays = [...days].sort((a, b) => a - b);
+  dayStart = Math.max(0, lo);
+  dayEnd = Math.min(24 * 60, hi);
+}
+
 function renderGrid() {
   const grid = $("#weekGrid");
-  const slots = Math.ceil((DAY_END - DAY_START) / SLOT);
+  const items = gridItems();
+  computeGridBounds(items);
+  const slots = Math.ceil((dayEnd - dayStart) / SLOT);
 
+  grid.style.setProperty("--wg-cols", String(gridDays.length));
   let html = `<div class="wg-head"></div>` +
-    GRID_DAYS.map((d) => `<div class="wg-head">${DAYS[d].slice(0, 3)}</div>`).join("");
+    gridDays.map((d) => `<div class="wg-head">${DAYS[d].slice(0, 3)}</div>`).join("");
   html += `<div>` + Array.from({ length: slots }, (_, i) => {
-    const m = DAY_START + i * SLOT;
+    const m = dayStart + i * SLOT;
     return `<div class="wg-time">${m % 60 === 0 ? fmt(m) : ""}</div>`;
   }).join("") + `</div>`;
-  for (const d of GRID_DAYS) {
+  for (const d of gridDays) {
     html += `<div class="wg-col" data-day="${d}">` +
-      Array.from({ length: slots }, () => `<div class="wg-slot"></div>`).join("") + `</div>`;
+      Array.from({ length: slots }, () => `<div class="wg-slot"></div>`).join("") +
+      `<div class="wg-ghost" hidden></div></div>`;
   }
   grid.innerHTML = html;
 
-  const place = (dayIdx, start, end, cls, title, sub, url) => {
+  const place = (dayIdx, start, end, cls, title, sub, url, removeAttr, detail) => {
     const col = grid.querySelector(`.wg-col[data-day="${dayIdx}"]`);
     if (!col) return;
-    const el = document.createElement(url ? "a" : "div");
-    if (url) {
-      el.href = url;
-      el.target = "_blank";
-      el.rel = "noopener noreferrer";
-      el.title = "Open on my.harvard";
-    }
-    el.className = `ev ${cls}${url ? " ev-link" : ""}`;
-    el.style.top = `${(Math.max(start, DAY_START) - DAY_START) * PX_PER_MIN}px`;
-    el.style.height = `${Math.max(16,
-      (Math.min(end, DAY_END) - Math.max(start, DAY_START)) * PX_PER_MIN)}px`;
-    el.innerHTML = `<b>${esc(title)}</b><small>${sub}</small>`;
+    const el = document.createElement("div");
+    el.className = `ev ${cls}`;
+    el.style.top = `${(Math.max(start, dayStart) - dayStart) * PX_PER_MIN}px`;
+    el.style.height = `${Math.max(18,
+      (Math.min(end, dayEnd) - Math.max(start, dayStart)) * PX_PER_MIN)}px`;
+    const inner = url
+      ? `<a class="ev-body ev-link" href="${esc(url)}" target="_blank"
+            rel="noopener noreferrer" title="Open on my.harvard">`
+      : `<span class="ev-body">`;
+    el.innerHTML = inner +
+      `<b>${esc(title)}</b><small>${sub}${detail ? `<br>${esc(detail)}` : ""}</small>` +
+      (url ? `</a>` : `</span>`) +
+      (removeAttr ? `<button class="ev-x" ${removeAttr}
+          title="Remove" aria-label="Remove ${esc(title)}">×</button>` : "");
     col.appendChild(el);
   };
-  const draw = (meetings, cls, title, url) => {
-    for (const m of meetings) {
+
+  const draw = (it, cls) => {
+    for (const m of it.meetings) {
       for (let d = 0; d < 7; d++) {
         if (m.day_mask & (1 << d)) {
-          place(d, m.start_min, m.end_min, cls, title,
-                `${fmt(m.start_min)}–${fmt(m.end_min)}`, url);
+          place(d, m.start_min, m.end_min, cls, it.label,
+                `${fmt(m.start_min)}–${fmt(m.end_min)}`, it.url, it.removeAttr, it.detail);
         }
       }
     }
   };
 
-  state.locked.forEach((i) => draw(
-    [{ day_mask: i.day_mask, start_min: i.start_min, end_min: i.end_min,
-       start_date: i.start_date, end_date: i.end_date }],
-    "ev-locked", i.title || i.code, courseUrl(i)));
-  // Enrolled courses already appear as locked blocks; drawing them again as
-  // plan candidates would paint purple over the crimson and misrepresent them.
-  state.plan.forEach((c) => {
-    if (c.enrolled) return;
-    draw(c.meetings, "ev-pinned", `${c.subject} ${c.catalog}`, courseUrl(c));
-  });
+  for (const it of items) draw(it, it.kind === "locked" ? "ev-locked" : "ev-pinned");
   if (state.preview && !state.plan.has(state.preview.key)) {
-    draw(state.preview.meetings, "ev-preview",
-      `${state.preview.subject} ${state.preview.catalog}`, courseUrl(state.preview));
+    draw({ label: `${state.preview.subject} ${state.preview.catalog}`,
+           url: courseUrl(state.preview), meetings: state.preview.meetings,
+           removeAttr: "", detail: "" }, "ev-preview");
   }
+
+  wireGridRemoval();
+  wireGridCreate();
+  renderLockedOverflow(items);
+}
+
+function wireGridRemoval() {
+  $$("#weekGrid [data-rm-locked]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      Store.removeLocked(term(), b.dataset.rmLocked);
+      loadLocked();
+      await Promise.all([refreshResults(), loadPlan()]);
+    }));
+  $$("#weekGrid [data-rm-plan]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      await togglePlan(b.dataset.rmPlan);
+    }));
+}
+
+/** Click an empty slot to create a block there; hover shows where it would go. */
+function wireGridCreate() {
+  const minutesAt = (col, clientY) => {
+    const r = col.getBoundingClientRect();
+    const raw = dayStart + ((clientY - r.top) / (r.height / (dayEnd - dayStart)));
+    return Math.max(dayStart, Math.min(dayEnd - SLOT,
+      Math.round(raw / SLOT) * SLOT));      // snap to the half hour
+  };
+
+  $$("#weekGrid .wg-col").forEach((col) => {
+    const ghost = col.querySelector(".wg-ghost");
+    col.addEventListener("mousemove", (e) => {
+      if (e.target.closest(".ev")) { ghost.hidden = true; return; }
+      const start = minutesAt(col, e.clientY);
+      ghost.hidden = false;
+      ghost.style.top = `${(start - dayStart) * PX_PER_MIN}px`;
+      ghost.style.height = `${NEW_BLOCK_MIN * PX_PER_MIN}px`;
+      ghost.textContent = `+ ${fmt(start)}`;
+    });
+    col.addEventListener("mouseleave", () => { ghost.hidden = true; });
+    col.addEventListener("click", (e) => {
+      if (e.target.closest(".ev")) return;   // clicking a course is not "add here"
+      const start = minutesAt(col, e.clientY);
+      openBlock({ day: Number(col.dataset.day), start,
+                  end: Math.min(dayEnd, start + NEW_BLOCK_MIN) });
+    });
+  });
+}
+
+/** Anything the grid cannot represent still needs to be visible and removable. */
+function renderLockedOverflow(items) {
+  const box = $("#lockedOverflow");
+  const orphans = items.filter((it) => it.meetings.every((m) => !m.day_mask));
+  if (!orphans.length) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  box.innerHTML = `<b>Not shown on the grid</b> (no meeting days recorded):` +
+    `<ul>${orphans.map((o) => `<li>${esc(o.label)}` +
+      (o.removeAttr ? ` <button class="ghost tiny" ${o.removeAttr}>Remove</button>` : "") +
+      `</li>`).join("")}</ul>`;
+  wireGridRemoval();
 }
 
 // ---------------------------------------------------------- combinations ---
 
-async function findCombos() {
+const SLOT_DEFAULT = () => ({
+  q: "", school: "", requirement: "",
+  project_based: false, technical: false, include_no_credit: false,
+});
+
+function slotCount() {
+  return parseInt($("#pick").value, 10) || state.electivesThisTerm || 2;
+}
+
+/** Grow or shrink the slot list, preserving filters already set. */
+function syncSlots() {
+  const n = slotCount();
+  const saved = Store.getSetting("combo_slots", null);
+  if (!state.slots.length && Array.isArray(saved) && saved.length) {
+    state.slots = saved.map((x) => ({ ...SLOT_DEFAULT(), ...x }));
+  }
+  while (state.slots.length < n) state.slots.push(SLOT_DEFAULT());
+  state.slots.length = n;
+  Store.setSetting("combo_slots", state.slots);
+}
+
+function renderSlotCards(poolSizes = null) {
+  syncSlots();
+  const reqOptions = (sel) => `<option value="">Any requirement</option>` +
+    state.policy.requirements
+      .filter((r) => !["outside_harvard", "independent_study"].includes(r.id))
+      .map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`)
+      .join("");
+  const schoolOptions = (sel) => `<option value="">All schools</option>` +
+    state.meta.schools.map((x) =>
+      `<option ${x === sel ? "selected" : ""}>${esc(x)}</option>`).join("");
+
+  $("#slotCards").innerHTML = state.slots.map((sl, i) => `
+    <div class="slotcard">
+      <div class="sc-head">
+        <h4>Elective ${i + 1}</h4>
+        ${poolSizes && poolSizes[i] != null
+          ? `<span class="sc-pool">${poolSizes[i].toLocaleString()} candidate${poolSizes[i] === 1 ? "" : "s"}</span>`
+          : ""}
+      </div>
+      <label class="fb-field">Keyword
+        <input data-slot="${i}" data-f="q" value="${esc(sl.q)}"
+               placeholder="title, code, instructor…"></label>
+      <label class="fb-field">Requirement
+        <select data-slot="${i}" data-f="requirement">${reqOptions(sl.requirement)}</select></label>
+      <label class="fb-field">School
+        <select data-slot="${i}" data-f="school">${schoolOptions(sl.school)}</select></label>
+      <label class="check"><input type="checkbox" data-slot="${i}" data-f="project_based"
+        ${sl.project_based ? "checked" : ""}> Project-based <span class="rule">1a</span></label>
+      <label class="check"><input type="checkbox" data-slot="${i}" data-f="technical"
+        ${sl.technical ? "checked" : ""}> Technical <span class="rule">2</span></label>
+      <label class="check"><input type="checkbox" data-slot="${i}" data-f="include_no_credit"
+        ${sl.include_no_credit ? "checked" : ""}> Counts toward nothing</label>
+    </div>`).join("");
+
+  $$("#slotCards [data-slot]").forEach((el) => {
+    const commit = () => {
+      const sl = state.slots[Number(el.dataset.slot)];
+      sl[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value;
+      Store.setSetting("combo_slots", state.slots);
+      // Only auto-rerun once the user has asked for results at least once;
+      // before that, an unfiltered two-slot search is a lot of work to do
+      // for someone who is still setting up.
+      if (state.comboRan) debouncedCombos();
+    };
+    el.addEventListener(el.tagName === "INPUT" && el.type !== "checkbox" ? "input" : "change", commit);
+  });
+}
+
+let comboTimer;
+const debouncedCombos = () => {
+  clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => findCombos(true), 400);
+};
+
+async function findCombos(resetPage = true) {
+  if (resetPage) state.comboOffset = 0;
+  syncSlots();
   const box = $("#combos");
   box.innerHTML = `<p class="empty">Searching…</p>`;
+  $("#comboPager").hidden = true;
+
   try {
     const d = await post("/api/combinations", {
       ...personal(),
-      term: term(), requirement: $("#requirement").value,
-      school: $("#school").value, q: $("#q").value.trim(),
-      pick: parseInt($("#pick").value, 10) || 0, buffer_min: buffer(),
-      include_no_credit: $("#includeNoCredit").checked,
-      project_based: $("#fProjectBased").checked,
-      technical: $("#fTechnical").checked,
-      limit: 40,
+      term: term(), buffer_min: buffer(),
+      slots: state.slots.map((sl, i) => ({ ...sl, label: `Elective ${i + 1}` })),
+      limit: state.comboLimit, offset: state.comboOffset,
     });
-    if (!d.count) {
-      box.innerHTML = `<p class="empty">No valid combinations from a pool of ${d.pool_size}
-        candidate sections. Loosen a filter or reduce the travel buffer.</p>`;
+    state.comboRan = true;
+    state.comboTotal = d.total;
+    renderSlotCards(d.slots.map((s) => s.pool_size));
+
+    const empty = d.slots.find((s) => s.pool_size === 0);
+    if (!d.total) {
+      box.innerHTML = `<p class="empty">${empty
+        ? `No candidates at all for <b>${esc(empty.label)}</b> — that slot's filters
+           match nothing with a meeting time. Loosen them.`
+        : `Every pairing collides. Loosen a slot's filters, or reduce the
+           ${buffer()}-minute travel buffer.`}</p>`;
+      $("#comboSummary").hidden = true;
       return;
     }
-    box.innerHTML = `<p class="hint">${d.count} combination(s) of ${d.pick} from
-      ${d.pool_size} candidates (capped at 40).</p>` +
-      d.combinations.map((combo, i) => `
-        <div class="combo"><h4>Option ${i + 1}</h4>
-          ${combo.map((c) => `<div class="row">
-            ${extLink(c, `${esc(c.code)} ${esc(c.section)}`, "r-code")} ${extLink(c, esc(c.title))}
-            <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
-              m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
-              fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
-            ${policyBadges(c.policy)}
-          </div>`).join("")}
-        </div>`).join("");
+
+    $("#comboSummary").hidden = false;
+    $("#comboSummary").innerHTML =
+      `<b>${d.total.toLocaleString()}${d.truncated ? "+" : ""}</b> combination${d.total === 1 ? "" : "s"} from ` +
+      d.slots.map((s) => `${s.pool_size.toLocaleString()}`).join(" × ") + " candidates" +
+      (d.truncated ? ` — stopped counting at ${d.total.toLocaleString()}; narrow a slot to see them all.` : "");
+
+    box.innerHTML = d.combinations.map((combo, i) => `
+      <div class="combo">
+        <h4>Option ${state.comboOffset + i + 1}</h4>
+        ${combo.map((c, si) => `<div class="row">
+          <span class="slotno">${si + 1}</span>
+          ${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")} ${extLink(c, esc(c.title))}
+          <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
+            m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
+            fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
+          ${policyBadges(c.policy)}
+        </div>`).join("")}
+      </div>`).join("");
+
+    const from = state.comboOffset + 1;
+    const to = state.comboOffset + d.combinations.length;
+    $("#comboPager").hidden = d.total <= state.comboLimit;
+    $("#comboRange").textContent = `${from}–${to} of ${d.total.toLocaleString()}${d.truncated ? "+" : ""}`;
+    $("#comboPrev").disabled = state.comboOffset === 0;
+    $("#comboNext").disabled = to >= d.total;
   } catch (e) {
     box.innerHTML = `<p class="empty">Combination search failed: ${esc(e.message)}</p>`;
   }
@@ -918,7 +1114,7 @@ const hhmmToMin = (v) => {
   return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
 };
 
-function openBlock() {
+function openBlock(prefill = null) {
   blockState.kind = "obligation";
   blockState.courseKey = "";
   blockState.days = new Set();
@@ -936,7 +1132,24 @@ function openBlock() {
     const v = parseInt(i.value, 10);
     i.checked ? blockState.days.add(v) : blockState.days.delete(v);
   }));
+
+  // Clicking an empty slot should land in the editor already describing that
+  // slot -- otherwise the click saved nothing over pressing "+ Block".
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  if (prefill) {
+    blockState.days.add(prefill.day);
+    $$("#bDays input").forEach((i) => {
+      if (Number(i.value) === prefill.day) i.checked = true;
+    });
+    $("#bStart").value = hhmm(prefill.start);
+    $("#bEnd").value = hhmm(prefill.end);
+  } else {
+    $("#bStart").value = "18:00";
+    $("#bEnd").value = "19:30";
+  }
+
   $("#blockModal").hidden = false;
+  $("#bTitle").focus();
 }
 
 async function searchUntimed() {
@@ -1006,11 +1219,24 @@ $("#term").addEventListener("change", async () => {
   await refreshAll();
 });
 $("#loadMore").addEventListener("click", () => { state.offset += state.limit; search(true); });
-$("#findCombos").addEventListener("click", findCombos);
+$("#findCombos").addEventListener("click", () => findCombos(true));
+$("#pick").addEventListener("change", () => {
+  renderSlotCards();
+  if (state.comboRan) findCombos(true);
+});
+$("#comboPrev").addEventListener("click", () => {
+  state.comboOffset = Math.max(0, state.comboOffset - state.comboLimit);
+  findCombos(false);
+});
+$("#comboNext").addEventListener("click", () => {
+  state.comboOffset += state.comboLimit;
+  findCombos(false);
+});
 $("#editProfile").addEventListener("click", openProfile);
 $("#cancelProfile").addEventListener("click", () => { $("#profileModal").hidden = true; });
 $("#saveProfile").addEventListener("click", saveProfile);
-$("#addBlockBtn").addEventListener("click", openBlock);
+$("#gridAddBlock").addEventListener("click", () => openBlock());
+$("#fbProfile").addEventListener("click", openProfile);
 $("#cancelBlock").addEventListener("click", () => { $("#blockModal").hidden = true; });
 $("#saveBlock").addEventListener("click", saveBlock);
 
@@ -1092,8 +1318,11 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => {
   $$(".tabpanel").forEach((x) => x.classList.remove("active"));
   t.classList.add("active");
   $(`#tab-${t.dataset.tab}`).classList.add("active");
+  renderFilterBarVisibility();
   if (t.dataset.tab === "grid") renderGrid();
+  if (t.dataset.tab === "combos" && !$("#slotCards").children.length) renderSlotCards();
 }));
+renderFilterBarVisibility();
 
 // "4 minutes ago" goes stale on a tab left open all afternoon.
 setInterval(() => { if (state.meta) renderMeta(); }, 60_000);

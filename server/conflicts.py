@@ -152,3 +152,87 @@ def free_windows(locked: Sequence[Block], day_index: int,
     if cursor < day_end:
         windows.append((cursor, day_end))
     return [(s, e) for s, e in windows if e > s]
+
+
+def find_slot_combinations(pools: list[dict[str, list[Block]]],
+                           locked: Sequence[Block],
+                           buffer_min: int = 0,
+                           cap: int = 2000) -> tuple[list[tuple[str, ...]], bool]:
+    """Pick one course per slot, where each slot has its own candidate pool.
+
+    Differs from find_combinations in that the slots are not interchangeable:
+    "a GSD project-based course AND a technical SEAS course" is two different
+    pools, not one pool chosen from twice.
+
+    Returns (results, truncated). Each result is one course key per slot, in
+    slot order.
+
+    Three things this has to get right:
+
+    - **A course cannot fill two slots.** With overlapping filters the same
+      course appears in several pools, and pairing it with itself is not a
+      schedule.
+    - **Unordered de-duplication.** When two slots have identical filters,
+      (a, b) and (b, a) are the same set of courses and must be reported once.
+      With identical filters either assignment is equally valid, so collapsing
+      on the frozenset loses nothing.
+    - **Round-robin fill, not depth-first.** Two unfiltered slots is ~2.3M
+      pairs, far past any cap worth enumerating, so results are a bounded
+      sample. Taking them depth-first would return page after page sharing the
+      same first course. Instead each anchor yields its first completion, then
+      its second, and so on, so the sample spreads across distinct first
+      courses and early pages are actually comparable.
+
+      This deliberately has no per-anchor cap. An earlier version capped at 5
+      per anchor, which silently made `total` an artifact of the cap rather than
+      a property of the filters: loosening a filter grew the candidate pool and
+      left the reported total unchanged, which reads as a bug in the filters.
+    """
+    # Pre-filter: a course that does not fit the locked schedule on its own can
+    # never appear in a valid combination, so drop it once rather than re-check
+    # it inside the recursion.
+    viable = [
+        [k for k, blocks in pool.items() if is_free(blocks, locked, buffer_min)]
+        for pool in pools
+    ]
+    if not pools or not all(viable):
+        return [], False
+
+    def completions(slot: int, chosen: list[str], chosen_blocks: list[Block]):
+        """Lazily yield every valid way to fill `slot` onwards."""
+        if slot == len(pools):
+            yield tuple(chosen)
+            return
+        for key in viable[slot]:
+            if key in chosen:
+                continue
+            blocks = pools[slot][key]
+            if any(overlaps(b, cb, buffer_min) for b in blocks for cb in chosen_blocks):
+                continue
+            yield from completions(slot + 1, chosen + [key], chosen_blocks + list(blocks))
+
+    # One lazy generator per first-slot course, advanced round-robin.
+    gens = {a: completions(1, [a], list(pools[0][a])) for a in viable[0]}
+    active = list(viable[0])
+    results: list[tuple[str, ...]] = []
+    seen: set[frozenset[str]] = set()
+
+    while active and len(results) < cap:
+        still_active = []
+        for anchor in active:
+            if len(results) >= cap:
+                still_active.append(anchor)
+                continue
+            for combo in gens[anchor]:
+                key_set = frozenset(combo)
+                if key_set in seen:
+                    continue          # same set reached via another anchor
+                seen.add(key_set)
+                results.append(combo)
+                still_active.append(anchor)
+                break                 # one per anchor per pass
+        active = still_active
+
+    # More remain only if some generator was left mid-stream.
+    truncated = len(results) >= cap and bool(active)
+    return results, truncated
