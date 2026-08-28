@@ -188,13 +188,37 @@ class SearchIn(PersonalIn):
 
 # ---------------------------------------------------------------- catalog ---
 
+# Punctuation the catalog and humans disagree about. The catalog stores
+# "ENG-SCI51"; the UI renders it "ENG-SCI 51"; the program office's spreadsheets
+# write "ENGSCI51". Someone typing any of those means the same course.
+_CODE_PUNCT = " -._/"
+
+
+def _norm_code_sql(column: str) -> str:
+    """SQL that strips code punctuation from `column`, for comparison."""
+    expr = f"UPPER({column})"
+    for ch in _CODE_PUNCT:
+        expr = f"REPLACE({expr}, '{ch}', '')"
+    return expr
+
+
 def _course_rows(conn, term: str, filters: dict) -> list[dict]:
     sql = ["SELECT * FROM courses WHERE term = ?"]
     params: list = [term]
     if filters.get("q"):
-        sql.append("AND (title LIKE ? OR code LIKE ? OR description LIKE ? OR instructors LIKE ?)")
-        like = f"%{filters['q']}%"
+        # Match the code with punctuation ignored on both sides, so searching
+        # for the string the UI displays actually finds the course.
+        q = filters["q"]
+        like = f"%{q}%"
+        stripped = "".join(ch for ch in q.upper() if ch not in _CODE_PUNCT)
+        clause = "title LIKE ? OR code LIKE ? OR description LIKE ? OR instructors LIKE ?"
         params += [like, like, like, like]
+        # Only when something survives stripping: a query of pure punctuation
+        # would otherwise collapse to '%%' and match the entire catalog.
+        if stripped:
+            clause += f" OR {_norm_code_sql('code')} LIKE ?"
+            params.append(f"%{stripped}%")
+        sql.append(f"AND ({clause})")
     if filters.get("school"):
         sql.append("AND school = ?")
         params.append(filters["school"])
@@ -440,8 +464,13 @@ def untimed_courses(term: str = DEFAULT_TERM, q: str = "", school: str = "NONH",
         sql.append("AND c.school = ?")
         params.append(school)
     if q:
-        sql.append("AND (c.code LIKE ? OR c.title LIKE ?)")
+        clause = "c.code LIKE ? OR c.title LIKE ?"
         params += [f"%{q}%", f"%{q}%"]
+        stripped = "".join(ch for ch in q.upper() if ch not in _CODE_PUNCT)
+        if stripped:
+            clause += f" OR {_norm_code_sql('c.code')} LIKE ?"
+            params.append(f"%{stripped}%")
+        sql.append(f"AND ({clause})")
     sql.append("ORDER BY c.code LIMIT ?")
     params.append(limit)
     rows = conn.execute(" ".join(sql), params).fetchall()
