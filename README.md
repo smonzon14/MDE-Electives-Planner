@@ -377,7 +377,7 @@ POST: there is no `user_key` query parameter any more, because there is no
 identity at all.
 
 Search body fields: `term`, `q`, `school`, `subject`, `requirement`, `free_only`,
-`include_no_credit`, `project_based`, `technical`, `include_tba`, `buffer_min`,
+`project_based`, `technical`, `include_tba`, `buffer_min`,
 `limit`, `offset`.
 
 ### Locked schedule vs. plan
@@ -400,22 +400,33 @@ result set would leave stale badges, since plan membership changes the
 annotation on *other* courses, not just the one you clicked. The refresh keeps
 your scroll depth: if you'd hit "Load more" three times, all of it comes back.
 
-### What "Any requirement" means
+### What the `requirement` filter means
 
-`requirement` is **not** an on/off filter. Omitting it (or passing `any`) means
-*"satisfies at least one elective requirement"* — the exact union of every
-specific option (`gsd`, `seas`, `fas_non_seas`, `other_harvard`,
-`outside_harvard`), verified set-identical, not merely equal in count.
+Only **rules 1 (GSD) and 2 (SEAS) are requirements.** Rules 4–7 are
+`kind: maximum` — ceilings on how many of a category may count toward the nine.
+A course that only hits a cap satisfies nothing; it just consumes headroom. So
+offering "FAS courses" or "Other Harvard schools" as *requirement* filters said
+something untrue about them, and they are no longer offered. Use the school
+filter instead.
 
-A course that is legal to take but satisfies nothing — a 100-level FAS course,
-or a sub-100 course excluded by rule 3 — is **not** in that set. Those appear
-only with `include_no_credit=true` ("Also show courses that count toward
-nothing"), and are badged distinctly:
+| Value | Means |
+|---|---|
+| `""` | **All courses** — no filtering. Includes courses that count toward nothing. |
+| `minimums` | Satisfies rule 1 or rule 2. (`any` is accepted as the old spelling.) |
+| `gsd` / `seas` | That specific minimum. |
+
+The option list is built from `kind == "minimum"`, so a new rule added to
+`mde_policy.yaml` lands in the right group without touching the client.
+
+There is no longer an `include_no_credit` flag: with `""` meaning *all*, courses
+that count toward nothing simply appear, badged distinctly, and with any
+specific filter they are excluded by definition. The badges are what carry the
+distinction:
 
 | Badge | Meaning |
 |---|---|
 | `fits` (green) | No overlap with anything |
-| `overlaps plan: X` (amber) | Collides with a course you're only *considering* — flagged, never hidden |
+| `overlaps: X` (amber) | Collides with a course you're only *considering* — flagged, never hidden |
 | `clashes: X` (red) | Collides with an enrolled course or a custom block |
 | *(green/amber requirement name)* | Satisfies a **minimum** -- rule 1 (GSD) or rule 2 (SEAS). Amber `?` = needs verification |
 | *(grey requirement name · max N)* | Counts toward the 9 and uses up a **cap** (rules 4-7), but satisfies no requirement |

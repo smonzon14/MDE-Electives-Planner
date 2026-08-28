@@ -754,6 +754,18 @@ class Policy:
             ],
         }
 
+    @property
+    def minimum_requirement_ids(self) -> set[str]:
+        """Requirements a student must actually satisfy (rules 1 and 2).
+
+        The rest are `kind: maximum` -- ceilings on how many of a category count
+        toward the nine. A course that only hits a cap satisfies nothing; it
+        just consumes headroom. Filtering by one is therefore not "filter by
+        requirement", which is why only these are offered as such.
+        """
+        return {r["id"] for r in self.p.get("requirements", [])
+                if r.get("kind") == "minimum"}
+
     def electives_this_term(self, profile: StudentProfile) -> int:
         return int((self.p.get("electives_by_term") or {}).get(profile.term_slot, 2))
 

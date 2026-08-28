@@ -157,11 +157,7 @@ async function boot() {
   $("#school").innerHTML = `<option value="">All schools</option>` +
     state.meta.schools.map((s) => `<option>${esc(s)}</option>`).join("");
 
-  // Only the requirements a course can actively satisfy are useful as filters.
-  const filterable = state.policy.requirements.filter(
-    (r) => !["outside_harvard", "independent_study"].includes(r.id));
-  $("#requirement").innerHTML = `<option value="">Any requirement</option>` +
-    filterable.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
+  $("#requirement").innerHTML = requirementOptions();
 
   $("#pAreas").innerHTML = state.policy.seas_subjects.map((s) =>
     `<label><input type="checkbox" value="${s}">${s}</label>`).join("");
@@ -319,6 +315,23 @@ function toggleMeta(force) {
 
 // --------------------------------------------------------------- profile ---
 
+/** Options for a "requirement it satisfies" select.
+ *
+ * Only rules 1 and 2 are requirements. The others are `kind: maximum` -- caps
+ * on how many of a category count toward the nine. A course that only hits a
+ * cap satisfies nothing, so listing "FAS courses" or "Other Harvard schools"
+ * as requirement filters said something untrue about them. Driven off `kind`
+ * so a new rule in mde_policy.yaml lands in the right group by itself.
+ */
+function requirementOptions(selected = "") {
+  const mins = state.policy.requirements.filter((r) => r.kind === "minimum");
+  const sel = (v) => (v === selected ? " selected" : "");
+  return `<option value=""${sel("")}>All courses</option>` +
+    `<option value="minimums"${sel("minimums")}>Any requirement (${
+      mins.map((r) => esc(r.short || r.name)).join(" or ")})</option>` +
+    mins.map((r) => `<option value="${r.id}"${sel(r.id)}>${esc(r.name)}</option>`).join("");
+}
+
 function electivesThisTerm() {
   const p = Store.getProfile();
   const map = state.policy?.electives_by_term || {};
@@ -458,7 +471,6 @@ function searchBody(extra = {}) {
     term: term(), q: $("#q").value.trim(), school: $("#school").value,
     requirement: $("#requirement").value,
     free_only: $("#freeOnly").checked,
-    include_no_credit: $("#includeNoCredit").checked,
     project_based: $("#fProjectBased").checked,
     technical: $("#fTechnical").checked,
     include_tba: $("#includeTba").checked, buffer_min: buffer(),
@@ -1042,7 +1054,7 @@ function renderLockedOverflow(items) {
 
 const SLOT_DEFAULT = () => ({
   q: "", school: "", requirement: "",
-  project_based: false, technical: false, include_no_credit: false,
+  project_based: false, technical: false,
 });
 
 function slotCount() {
@@ -1063,11 +1075,7 @@ function syncSlots() {
 
 function renderSlotCards(poolSizes = null) {
   syncSlots();
-  const reqOptions = (sel) => `<option value="">Any requirement</option>` +
-    state.policy.requirements
-      .filter((r) => !["outside_harvard", "independent_study"].includes(r.id))
-      .map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`)
-      .join("");
+  const reqOptions = (sel) => requirementOptions(sel);
   const schoolOptions = (sel) => `<option value="">All schools</option>` +
     state.meta.schools.map((x) =>
       `<option ${x === sel ? "selected" : ""}>${esc(x)}</option>`).join("");
@@ -1091,8 +1099,6 @@ function renderSlotCards(poolSizes = null) {
         ${sl.project_based ? "checked" : ""}> Project-based <span class="rule">1a</span></label>
       <label class="check"><input type="checkbox" data-slot="${i}" data-f="technical"
         ${sl.technical ? "checked" : ""}> Technical <span class="rule">2</span></label>
-      <label class="check"><input type="checkbox" data-slot="${i}" data-f="include_no_credit"
-        ${sl.include_no_credit ? "checked" : ""}> Counts toward nothing</label>
     </div>`).join("");
 
   $$("#slotCards [data-slot]").forEach((el) => {
@@ -1505,7 +1511,7 @@ async function saveBlock() {
 let t;
 const debounced = () => { clearTimeout(t); t = setTimeout(search, 220); };
 $("#q").addEventListener("input", debounced);
-["#school", "#requirement", "#freeOnly", "#includeNoCredit", "#fProjectBased",
+["#school", "#requirement", "#freeOnly", "#fProjectBased",
  "#fTechnical", "#includeTba"]
   .forEach((s) => $(s).addEventListener("change", () => search()));
 $("#buffer").addEventListener("change", async () => {

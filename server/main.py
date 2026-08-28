@@ -170,12 +170,15 @@ class SearchIn(PersonalIn):
     q: str = Field("", max_length=200)
     school: str = ""
     subject: str = ""
-    # "" / "any" means "satisfies at least ONE elective requirement" -- the
-    # union of every specific option, NOT the absence of a filter. A course
-    # that counts toward nothing appears only when include_no_credit is set.
-    requirement: str = ""      # any | gsd | seas | fas_non_seas | other_harvard
+    # "" means no filter at all -- the whole catalog, including courses that
+    # count toward nothing. "minimums" means the course satisfies rule 1 or
+    # rule 2. Anything else is a specific requirement id.
+    #
+    # Cap requirements (kind: maximum) are deliberately not offered: a course
+    # that only hits a cap satisfies nothing, so "filter by requirement" would
+    # be a lie. Use the school filter for those.
+    requirement: str = ""      # "" | minimums | gsd | seas
     free_only: bool = False
-    include_no_credit: bool = False
     # Approved-list filters (rule 1a / rule 2). Independent of `requirement`:
     # a course can be on a list yet still fail its school's level gate.
     project_based: bool = False
@@ -256,6 +259,21 @@ def _attach_meetings(conn, courses: list[dict]) -> None:
             })
     for c in courses:
         c["meetings"] = by_key.get(c["key"], [])
+
+
+def _requirement_ok(requirement: str, satisfied: list[str]) -> bool:
+    """Does this course pass the requirement filter?
+
+    "" is no filter (the whole catalog). "minimums" is rule 1 or rule 2 --
+    the only requirements a student must actually satisfy. Anything else is a
+    specific id. "any" is accepted as the old spelling of "minimums".
+    """
+    if not requirement or requirement == "all":
+        return True
+    if requirement in ("minimums", "any"):
+        # satisfied_ids() is a list, not a set.
+        return any(r in POLICY.minimum_requirement_ids for r in satisfied)
+    return requirement in satisfied
 
 
 def _blocks(meetings: list[dict], label: str = "") -> list[Block]:
@@ -364,11 +382,7 @@ def search(inp: SearchIn):
             continue
         if inp.technical and not el.is_technical:
             continue
-        satisfied = el.satisfied_ids()
-        if inp.requirement and inp.requirement != "any":
-            if inp.requirement not in satisfied:
-                continue
-        elif not satisfied and not inp.include_no_credit:
+        if not _requirement_ok(inp.requirement, el.satisfied_ids()):
             continue
 
         if not c["meetings"] and not inp.include_tba:
@@ -798,10 +812,9 @@ class SlotIn(BaseModel):
     """
     q: str = Field("", max_length=200)
     school: str = ""
-    requirement: str = ""
+    requirement: str = ""      # "" | minimums | gsd | seas
     project_based: bool = False
     technical: bool = False
-    include_no_credit: bool = False
     label: str = ""
 
 
@@ -825,15 +838,13 @@ class CombosIn(PersonalIn):
     requirement: str = ""
     project_based: bool = False
     technical: bool = False
-    include_no_credit: bool = False
 
     def resolved_slots(self, default_pick: int) -> list[SlotIn]:
         if self.slots:
             return list(self.slots)
         n = self.pick or default_pick
         flat = SlotIn(q=self.q, school=self.school, requirement=self.requirement,
-                      project_based=self.project_based, technical=self.technical,
-                      include_no_credit=self.include_no_credit)
+                      project_based=self.project_based, technical=self.technical)
         return [flat.model_copy() for _ in range(max(1, n))]
 
 
@@ -852,11 +863,7 @@ def _slot_pool(conn, term: str, slot: SlotIn, profile: StudentProfile,
             continue
         if slot.technical and not el.is_technical:
             continue
-        satisfied = el.satisfied_ids()
-        if slot.requirement and slot.requirement != "any":
-            if slot.requirement not in satisfied:
-                continue
-        elif not satisfied and not slot.include_no_credit:
+        if not _requirement_ok(slot.requirement, el.satisfied_ids()):
             continue
         pool[c["key"]] = _blocks(c["meetings"], c["title"])
         c["policy"] = el.to_dict()
