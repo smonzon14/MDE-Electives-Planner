@@ -658,3 +658,44 @@ button.addcombo:hover { border-color: var(--preview); background: rgba(37,99,235
    a top margin to .rep, which would also affect stacked report blocks. */
 #planReport { margin-top: 14px; }
 #planReport:empty { margin-top: 0; }
+
+/* ============================================================== loading ===
+   Skeletons while a list is first populated, a spinner overlaid on a button
+   that is mid-request, and a dim on a list that is refreshing in place. */
+
+@keyframes skelshine { from { background-position: -220px 0; } to { background-position: 220px 0; } }
+
+.skel { border-radius: 6px; background: var(--line);
+        background-image: linear-gradient(90deg,
+          var(--line) 0%, rgba(128,128,128,.28) 50%, var(--line) 100%);
+        background-size: 220px 100%; background-repeat: no-repeat;
+        animation: skelshine 1.1s ease-in-out infinite; }
+
+.skelcard { border: 1px solid var(--line); border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 10px; }
+.skel-line { height: 11px; margin-bottom: 8px; }
+.skel-line:last-child { margin-bottom: 0; }
+
+/* A refresh in place: keep the old content readable but clearly stale, and
+   stop clicks landing on rows that are about to be replaced. */
+.is-refreshing { opacity: .55; pointer-events: none; transition: opacity .12s; }
+
+/* Inline spinner used next to a count while a request is in flight. */
+.spin { display: inline-block; width: 11px; height: 11px; vertical-align: -1px;
+        border: 2px solid var(--line); border-top-color: var(--muted);
+        border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Button mid-request: the label goes transparent rather than being replaced,
+   so the button keeps its width and nothing reflows around it. */
+button.btn-busy { position: relative; color: transparent !important; pointer-events: none; }
+button.btn-busy::after { content: ""; position: absolute; inset: 0; margin: auto;
+        width: 11px; height: 11px; border: 2px solid rgba(128,128,128,.45);
+        border-top-color: var(--ink); border-radius: 50%;
+        animation: spin .7s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skel, .spin, button.btn-busy::after { animation: none; }
+  .skel { background-image: none; }
+}
+.skelwrap { list-style: none; margin: 0; padding: 0; }

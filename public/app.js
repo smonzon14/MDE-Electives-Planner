@@ -108,6 +108,37 @@ function toast(msg, kind = "ok") {
   toast._t = setTimeout(() => { el.hidden = true; }, 5000);
 }
 
+// --------------------------------------------------------------- loading ---
+
+/** Placeholder rows shown while a list is populated for the first time. */
+function skeletonCards(n, lines = 3) {
+  return Array.from({ length: n }, () =>
+    `<li class="skelcard">${Array.from({ length: lines }, (_, i) =>
+      `<div class="skel skel-line" style="width:${[70, 45, 30][i] ?? 40}%"></div>`
+    ).join("")}</li>`).join("");
+}
+
+/** Run an async action with the button showing a spinner in place of its label.
+ *
+ * The label goes transparent rather than being swapped out, so the button keeps
+ * its width and the row does not reflow while the request is in flight.
+ */
+async function withBusy(btn, fn) {
+  if (btn) { btn.classList.add("btn-busy"); btn.disabled = true; }
+  try {
+    return await fn();
+  } finally {
+    // The list is usually re-rendered underneath us, replacing the button; only
+    // restore one that is still in the document.
+    if (btn && btn.isConnected) { btn.classList.remove("btn-busy"); btn.disabled = false; }
+  }
+}
+
+/** Dim a list that is being refreshed in place, so stale rows aren't clickable. */
+function setRefreshing(sel, on) {
+  $(sel)?.classList.toggle("is-refreshing", on);
+}
+
 // ------------------------------------------------------------------ boot ---
 
 async function boot() {
@@ -157,6 +188,7 @@ async function boot() {
   window.postMessage({ source: "mde-page", type: "MDE_EXT_PING" }, location.origin);
 
   renderGrid();
+  $("#results").innerHTML = skeletonCards(6);
   await refreshAll();
 
   // First run: nudge toward the two things that make the tool useful.
@@ -436,8 +468,18 @@ function searchBody(extra = {}) {
 
 async function search(append = false) {
   if (!append) state.offset = 0;
-  const d = await post("/api/search",
-    searchBody({ limit: state.limit, offset: state.offset }));
+  // Nothing on screen yet -> skeletons. Something on screen -> dim it, because
+  // replacing readable results with skeletons on every filter tweak flickers.
+  if (!append && !state.results.length) $("#results").innerHTML = skeletonCards(6);
+  else setRefreshing("#results", true);
+  $("#resultCount").innerHTML = `${$("#resultCount").textContent} <span class="spin"></span>`;
+  let d;
+  try {
+    d = await post("/api/search",
+      searchBody({ limit: state.limit, offset: state.offset }));
+  } finally {
+    setRefreshing("#results", false);
+  }
   state.total = d.total;
   state.electivesThisTerm = d.electives_this_term;
   state.hiddenTba = d.hidden_tba || 0;
@@ -451,7 +493,13 @@ async function search(append = false) {
 // showing a stale badge until the next search.
 async function refreshResults() {
   const shown = Math.max(state.limit, state.results.length);
-  const d = await post("/api/search", searchBody({ limit: shown, offset: 0 }));
+  setRefreshing("#results", true);
+  let d;
+  try {
+    d = await post("/api/search", searchBody({ limit: shown, offset: 0 }));
+  } finally {
+    setRefreshing("#results", false);
+  }
   state.total = d.total;
   state.hiddenTba = d.hidden_tba || 0;
   state.results = d.results;
@@ -537,6 +585,7 @@ function courseCard(c, inPlan) {
 }
 
 function renderResults() {
+  // Also clears the in-flight spinner appended by search().
   $("#resultCount").textContent =
     `${state.total.toLocaleString()} matching section${state.total === 1 ? "" : "s"}` +
     (state.results.length < state.total ? ` — showing ${state.results.length}` : "");
@@ -579,16 +628,39 @@ function wireCards(sel, source) {
   });
   $$(`${sel} [data-plan]`).forEach((b) => b.addEventListener("click", async (e) => {
     e.stopPropagation();
-    await togglePlan(b.dataset.plan);
+    await togglePlan(b.dataset.plan, b);
   }));
 }
 
 // ------------------------------------------------------------------ plan ---
 
-async function togglePlan(key) {
-  Store.togglePlan(term(), key);
-  await loadPlan();           // updates state.plan first...
-  await refreshResults();     // ...so the re-render reads the new membership
+/** The course object for a key, from whatever is already on screen. */
+function knownCourse(key) {
+  return state.plan.get(key)
+    || state.results.find((c) => c.key === key)
+    || state.comboPage.flat().find((c) => c.key === key)
+    || null;
+}
+
+async function togglePlan(key, btn = null) {
+  const t = term();
+  const added = Store.togglePlan(t, key);
+
+  // Draw the change immediately. The clicked row already carries the course's
+  // meetings, so the calendar does not have to wait on two network round trips
+  // to show something the browser already knows. The fetches below then
+  // reconcile with the server's view (policy verdicts, conflict labels).
+  const course = knownCourse(key);
+  if (added && course) state.plan.set(key, { ...course, in_plan: 1, enrolled: false });
+  else if (!added) state.plan.delete(key);
+  $("#planCount").textContent = String(Store.plan(t).length);
+  renderGrid();
+
+  await withBusy(btn, async () => {
+    // Independent requests: renderResults reads plan membership from Store,
+    // not from the /api/plan response, so these never needed to be sequential.
+    await Promise.all([loadPlan(), refreshResults()]);
+  });
   // A combination's button reflects plan membership, so adding one of its
   // courses from elsewhere has to update it.
   if (state.comboPage.length) renderCombos();
@@ -607,6 +679,13 @@ async function loadPlan() {
       the full requirement check.</p>`;
     renderGrid();
     return;
+  }
+  if (!state.plan.size) {
+    $("#planList").innerHTML = skeletonCards(2);
+    $("#planReport").innerHTML = `<div class="skelcard">
+      <div class="skel skel-line" style="width:40%"></div>
+      <div class="skel skel-line" style="width:80%"></div>
+      <div class="skel skel-line" style="width:65%"></div></div>`;
   }
   const d = await post("/api/plan", { ...personal(), term: term(), buffer_min: buffer() });
   state.plan = new Map(d.items.map((c) => [c.key, c]));
@@ -1052,7 +1131,7 @@ function renderCombos() {
   $$("#combos [data-combo-plan]").forEach((b) =>
     b.addEventListener("click", async (e) => {
       e.stopPropagation();
-      await toggleComboInPlan(state.comboPage[Number(b.dataset.comboPlan)]);
+      await toggleComboInPlan(state.comboPage[Number(b.dataset.comboPlan)], b);
     }));
 }
 
@@ -1063,18 +1142,25 @@ function renderCombos() {
  * now exceeds the term's elective count -- guessing here would either destroy
  * work or hide the overflow.
  */
-async function toggleComboInPlan(combo) {
+async function toggleComboInPlan(combo, btn = null) {
   if (!combo) return;
   const t = term();
   const removing = comboInPlan(combo);
   let n = 0;
   for (const c of combo) {
-    if (removing === Store.inPlan(t, c.key)) { Store.togglePlan(t, c.key); n++; }
+    if (removing === Store.inPlan(t, c.key)) {
+      Store.togglePlan(t, c.key);
+      if (removing) state.plan.delete(c.key);
+      else state.plan.set(c.key, { ...c, in_plan: 1, enrolled: false });
+      n++;
+    }
   }
   setPreview([]);
-  await loadPlan();
+  $("#planCount").textContent = String(Store.plan(t).length);
+  renderGrid();      // instant feedback; the fetches below reconcile
+
+  await withBusy(btn, () => Promise.all([loadPlan(), refreshResults()]));
   renderCombos();
-  await refreshResults();
 
   const total = Store.plan(t).length;
   const want = state.electivesThisTerm;
@@ -1096,7 +1182,7 @@ async function findCombos(resetPage = true) {
   if (resetPage) state.comboOffset = 0;
   syncSlots();
   const box = $("#combos");
-  box.innerHTML = `<p class="empty">Searching…</p>`;
+  box.innerHTML = `<ul class="skelwrap">${skeletonCards(4, 3)}</ul>`;
   $("#comboPager").hidden = true;
 
   try {
