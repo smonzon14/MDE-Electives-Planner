@@ -88,20 +88,24 @@ fas_levels:
   below_100:
     max: 99
     label: "Below 100 level"
+    short: "Below 100"
     graduate: false
     note: "Rule 3: requires program director approval, normally taken as an overload, and does not count toward elective requirements or the 18-credit semester load (CS50 and approved exceptions excluded)."
   ug_and_grad:
     ranges: [[100, 199], [1000, 1999]]
     label: "For Undergraduates and Graduates"
+    short: "UG + Grad"
     graduate: false
     note: "Not a graduate-level elective unless the instructor modifies it for graduate students. Written proof must be submitted to the MDE program office."
   graduate:
     ranges: [[200, 299], [2000, 2999]]
     label: "Primarily for Graduates"
+    short: "Graduate"
     graduate: true
   grad_research:
     ranges: [[300, 399], [3000, 3999]]
     label: "Graduate Courses of Reading and Research"
+    short: "Grad research"
     graduate: true
     note: "Likely an independent study / reading course -- see rule 7 (max 1, cannot satisfy GSD or SEAS requirements)."
 
@@ -125,6 +129,7 @@ requirements:
   - id: gsd
     rule: 1
     name: "GSD electives"
+    short: "GSD"
     kind: minimum
     min_courses: 2
     min_credits: 8
@@ -143,6 +148,7 @@ requirements:
   - id: seas
     rule: 2
     name: "SEAS electives"
+    short: "SEAS"
     kind: minimum
     min_courses: 2
     min_credits: 8
@@ -168,6 +174,7 @@ requirements:
   - id: fas_non_seas
     rule: 4
     name: "FAS courses (non-SEAS subject areas)"
+    short: "FAS non-SEAS"
     kind: maximum
     max_courses: 4
     match:
@@ -178,6 +185,7 @@ requirements:
   - id: outside_harvard
     rule: 5
     name: "Courses outside Harvard (e.g. MIT)"
+    short: "Outside Harvard"
     kind: maximum
     max_courses: 4
     requires_graduate_level: true
@@ -190,6 +198,7 @@ requirements:
   - id: other_harvard
     rule: 6
     name: "Other Harvard graduate schools (non-GSD)"
+    short: "Other Harvard school"
     kind: maximum
     max_courses: 4
     match:
@@ -198,6 +207,7 @@ requirements:
   - id: independent_study
     rule: 7
     name: "Independent study / reading courses"
+    short: "Independent study"
     kind: maximum
     max_courses: 1
     cannot_satisfy: [gsd, seas]

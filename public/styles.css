@@ -172,25 +172,27 @@ main.layout { display: grid; gap: 18px; align-items: start;
   padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
 }
 .results li:hover { border-color: var(--preview); }
-.r-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+/* The title owns its full row. It used to share a flex row with the fit badge,
+   which on a phone squeezed long titles into six wrapped lines. */
+.r-head { display: block; }
 .r-code { font-weight: 700; font-size: 12px; color: var(--crimson); }
 .r-title { font-weight: 600; }
 .r-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
-/* Badges get their own row. They used to share the meta line with a
-   float: right button, so a course with several badges ran straight into
-   "Add to plan". Now the badges wrap inside their own box and the button sits
-   in a fixed cell beside it, so they can never collide however many there are. */
-.r-pills { display: flex; flex-wrap: wrap; align-items: flex-start;
-           gap: 6px 10px; margin-top: 5px; }
+/* Badges and the action share the last row. .r-foot deliberately does NOT wrap:
+   only .r-badges does, so the action stays pinned to the top-right of the row
+   however many badges there are. Previously the whole row wrapped, so the
+   button's position moved with the badge count -- which is what made the cards
+   look disorganised. */
+.r-foot { display: flex; gap: 10px; align-items: flex-start; margin-top: 6px; }
 .r-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
-            flex: 1 1 200px; min-width: 0; }
-.r-actions { flex: 0 0 auto; margin-left: auto; }
-/* Badges are nowrap everywhere else (grid blocks, combo rows) so they read as
-   single tokens. Here they must be allowed to break: some requirement labels
-   are long enough to overflow a narrow card and run into the button. */
-.r-badges .badge { margin-left: 0; max-width: 100%;
-                   white-space: normal; overflow-wrap: anywhere; }
+            flex: 1 1 auto; min-width: 0; }
+.r-actions { flex: 0 0 auto; }
+/* Single-line pills. The short labels from the policy make this safe now; an
+   unexpectedly long one truncates rather than wrapping to two lines, and the
+   full text is in the title attribute. */
+.r-badges .badge { margin-left: 0; max-width: 100%; white-space: nowrap;
+                   overflow: hidden; text-overflow: ellipsis; }
 .badge {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px;
   border-radius: 20px; margin-left: 5px; white-space: nowrap;
@@ -699,3 +701,48 @@ button.btn-busy::after { content: ""; position: absolute; inset: 0; margin: auto
   .skel { background-image: none; }
 }
 .skelwrap { list-style: none; margin: 0; padding: 0; }
+
+/* ================================================================ mobile ===
+   Phones and small tablets. The single biggest change is dropping --ui-scale
+   to 1: at 1.2 everything is 20% larger than the design intends, which on a
+   ~390px screen wrapped course titles to six lines and broke pills across two.
+   Every zoom-aware calc() in this file reads --ui-scale, and app.js reads the
+   computed zoom, so both adapt to this on their own. */
+@media (max-width: 820px) {
+  :root { --ui-scale: 1; }
+
+  main { padding: 12px; }
+  main.layout { padding-bottom: 78px; }   /* room for the schedule button */
+
+  /* Cards go fully vertical: badges, then a full-width action. On a phone a
+     thumb-sized target at a predictable place beats a small one that moves. */
+  .r-foot { flex-direction: column; align-items: stretch; gap: 8px; }
+  .r-actions { width: 100%; }
+  .r-actions .pin { width: 100%; padding: 8px; font-size: 12.5px; }
+  .r-actions .badge { display: block; text-align: center; padding: 5px; }
+
+  .results li { padding: 11px 12px; }
+  .r-title { display: inline; }
+
+  /* Filters stack rather than trying to share a row. */
+  .fb-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  /* One per line: two columns squeezed the "rule 1a" tags onto a second line. */
+  .fb-row.checks { display: flex; flex-direction: column; align-items: stretch; gap: 9px; }
+  .fb-field.grow { flex: 1 1 auto; }
+
+  /* One elective slot card per row. */
+  .slotcards { grid-template-columns: 1fr; }
+
+  /* The background strip reads better as two columns than six squeezed ones. */
+  .bgstrip { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+  .tabs { gap: 2px; }
+  .tab { padding: 8px 10px; font-size: 13px; }
+
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .topbar-controls { gap: 10px; width: 100%; }
+  .topbar-controls label { flex: 1 1 auto; }
+
+  .combo-head { flex-wrap: wrap; }
+  .change-list.wide { columns: 1; }
+}

@@ -522,10 +522,13 @@ function policyBadges(pol) {
       // mde_policy.yaml is styled correctly without touching this.
       const isCap = r.kind === "maximum";
       const cls = isCap ? "capped" : (v.verdict === "yes" ? "req" : "reqmaybe");
-      const label = esc(r.name || v.requirement_id)
+      const label = esc(r.short || r.name || v.requirement_id)
         + (isCap && r.max_courses ? ` \u00b7 max ${r.max_courses}` : "")
         + (v.verdict === "verify" ? " ?" : "");
-      return `<span class="badge ${cls}" title="${esc(v.reason)}">${label}</span>`;
+      // A pill must fit on one line, so it shows the short form; the full
+        // requirement name joins the reason in the tooltip.
+        const tip = `${r.name || v.requirement_id}\n${v.reason}`;
+        return `<span class="badge ${cls}" title="${esc(tip)}">${label}</span>`;
     }).join("");
 }
 
@@ -544,7 +547,7 @@ function courseCard(c, inPlan) {
     : clashes.length
       ? `<span class="badge clash">clashes: ${esc(clashes.join(", "))}</span>`
       : planClashes.length
-        ? `<span class="badge planclash" title="Overlaps a course in your plan — still selectable">overlaps plan: ${esc(planClashes.join(", "))}</span>`
+        ? `<span class="badge planclash" title="Overlaps a course in your plan — still selectable">overlaps: ${esc(planClashes.join(", "))}</span>`
         : `<span class="badge fits">fits</span>`;
   const pol = c.policy || {};
   const lists = [
@@ -560,14 +563,17 @@ function courseCard(c, inPlan) {
   return `
     <li data-key="${esc(c.key)}" class="${
       !clashes.length && planClashes.length ? "has-plan-clash" : ""}">
-      <div class="r-top">
-        <div>${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")}
-             ${extLink(c, esc(c.title), "r-title")}</div>
-        <div>${fit}</div>
+      <div class="r-head">${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")}
+        ${extLink(c, esc(c.title), "r-title")}</div>
+      <div class="r-meta">
+        ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
+        ${c.instructors.length ? " · " + esc(c.instructors.join(", ")) : ""}
       </div>
-      <div class="r-pills">
+      <div class="r-foot">
         <div class="r-badges">
-          <span class="badge level" title="${esc(pol.level_label || "")}">${esc(pol.level_label || "")}</span>
+          ${fit}
+          <span class="badge level" title="${esc(pol.level_label || "")}">${
+            esc(pol.level_short || pol.level_label || "")}</span>
           ${policyBadges(pol)}${lists}${extra}
         </div>
         <div class="r-actions">
@@ -575,10 +581,6 @@ function courseCard(c, inPlan) {
             : `<button class="pin ghost" data-plan="${esc(c.key)}">${
                 inPlan ? "Remove" : "Add to plan"}</button>`}
         </div>
-      </div>
-      <div class="r-meta">
-        ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
-        ${c.instructors.length ? " · " + esc(c.instructors.join(", ")) : ""}
       </div>
       ${warns}
     </li>`;

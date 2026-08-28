@@ -116,6 +116,7 @@ class CourseEligibility:
     code: str
     level: Optional[int]
     level_label: str
+    level_short: str
     is_graduate: bool
     is_seas: bool
     counts_at_all: bool
@@ -134,6 +135,7 @@ class CourseEligibility:
             "code": self.code,
             "level": self.level,
             "level_label": self.level_label,
+            "level_short": self.level_short,
             "is_graduate": self.is_graduate,
             "is_seas": self.is_seas,
             "counts_at_all": self.counts_at_all,
@@ -254,7 +256,8 @@ class Policy:
         return "unknown"
 
     def classify_level(self, course: dict) -> tuple[Optional[int], str, bool]:
-        """Returns (level, label, is_graduate)."""
+        """Returns (level, label, is_graduate). See level_label_short for the
+        compact form the UI puts on a badge."""
         level = parse_level(course.get("catalog") or "")
         band = self.level_band(course)
 
@@ -268,6 +271,22 @@ class Policy:
 
         spec = self.levels.get(band, {})
         return level, spec.get("label", band), bool(spec.get("graduate", False))
+
+    # Long labels wrap to two lines inside a pill, which is most of why the
+    # course card looked disorganised. The full text stays in the tooltip.
+    LEVEL_SHORT_FIXED = {
+        "Graduate school course": "Graduate",
+        "Non-Harvard cross-registration": "Cross-reg",
+        "Unknown level": "Level unknown",
+    }
+
+    def level_label_short(self, label: str) -> str:
+        if label in self.LEVEL_SHORT_FIXED:
+            return self.LEVEL_SHORT_FIXED[label]
+        for spec in self.levels.values():
+            if isinstance(spec, dict) and spec.get("label") == label:
+                return spec.get("short") or label
+        return label
 
     def is_seas(self, course: dict) -> tuple[bool, Optional[str]]:
         """Returns (is_seas, caveat). SEAS is a subset of FAS."""
@@ -321,6 +340,7 @@ class Policy:
 
         el = CourseEligibility(
             code=code, level=level, level_label=level_label,
+            level_short=self.level_label_short(level_label),
             is_graduate=is_grad, is_seas=seas, counts_at_all=True, is_cs50=cs50,
         )
 
@@ -747,6 +767,7 @@ class Policy:
             "seas_subjects": sorted(self.seas_subjects),
             "requirements": [
                 {"id": r["id"], "rule": r.get("rule"), "name": r["name"],
+                 "short": r.get("short") or r["name"],
                  "kind": r.get("kind"), "min_courses": r.get("min_courses"),
                  "max_courses": r.get("max_courses")}
                 for r in self.p.get("requirements", [])
