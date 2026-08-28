@@ -197,7 +197,6 @@ main.layout { display: grid; gap: 18px; align-items: start;
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px;
   border-radius: 20px; margin-left: 5px; white-space: nowrap;
 }
-.badge.fits { background: rgba(21,115,71,.14); color: var(--ok); }
 .badge.clash { background: rgba(176,42,55,.14); color: var(--bad); }
 .badge.tba { background: rgba(107,114,128,.18); color: var(--muted); }
 .badge.bucket { background: rgba(37,99,235,.14); color: var(--preview); }

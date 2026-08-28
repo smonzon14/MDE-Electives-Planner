@@ -554,13 +554,16 @@ function courseCard(c, inPlan) {
   //   fits          -> clear
   const clashes = c.conflicts || [];
   const planClashes = c.plan_conflicts || [];
+  // No badge when it fits: "clashes" and "overlaps" are the exceptions, so
+  // their absence already says the course is clear. A "fits" badge on almost
+  // every row was noise that made the real warnings harder to spot.
   const fit = !c.meetings.length
     ? `<span class="badge tba">TBA</span>`
     : clashes.length
       ? `<span class="badge clash">clashes: ${esc(clashes.join(", "))}</span>`
       : planClashes.length
         ? `<span class="badge planclash" title="Overlaps a course in your plan — still selectable">overlaps: ${esc(planClashes.join(", "))}</span>`
-        : `<span class="badge fits">fits</span>`;
+        : "";
   const pol = c.policy || {};
   const lists = [
     pol.is_project_based ? `<span class="badge listed" title="On the MDE approved project-based list (rule 1a)">project-based</span>` : "",

@@ -425,7 +425,7 @@ distinction:
 
 | Badge | Meaning |
 |---|---|
-| `fits` (green) | No overlap with anything |
+| *(no fit badge)* | No overlap with anything — the absence of a warning is the signal |
 | `overlaps: X` (amber) | Collides with a course you're only *considering* — flagged, never hidden |
 | `clashes: X` (red) | Collides with an enrolled course or a custom block |
 | *(green/amber requirement name)* | Satisfies a **minimum** -- rule 1 (GSD) or rule 2 (SEAS). Amber `?` = needs verification |
