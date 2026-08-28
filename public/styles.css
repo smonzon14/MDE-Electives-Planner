@@ -746,3 +746,21 @@ button.btn-busy::after { content: ""; position: absolute; inset: 0; margin: auto
   .combo-head { flex-wrap: wrap; }
   .change-list.wide { columns: 1; }
 }
+
+/* ---- "this is not an approval" ---- */
+/* The plan tab shows green ticks and an "N of 9 counted" tally, which reads like
+   an official audit. The program office is the only approver, so the framing has
+   to be permanent and above the verdicts -- not a dismissible banner. */
+.notofficial { margin-bottom: 14px; padding: 10px 12px; border-radius: 9px;
+               font-size: 12.5px; line-height: 1.55; color: var(--ink);
+               background: rgba(180,120,0,.1);
+               border: 1px solid rgba(180,120,0,.45); }
+.notofficial b { color: #a06400; }
+@media (prefers-color-scheme: dark) { .notofficial b { color: #e0a83c; } }
+.no-flag { display: block; margin-top: 5px; font-weight: 600; }
+
+.wnotofficial { margin: 10px 0 0; padding: 9px 11px; border-radius: 8px;
+                font-size: 12px; line-height: 1.5; color: var(--muted);
+                background: rgba(180,120,0,.1);
+                border: 1px solid rgba(180,120,0,.35); }
+.wnotofficial b { color: var(--ink); }

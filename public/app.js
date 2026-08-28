@@ -602,7 +602,7 @@ function renderResults() {
   if (n) {
     note.innerHTML = `${n.toLocaleString()} more course${n === 1 ? "" : "s"} would
       match, but ${n === 1 ? "has" : "have"} no published meeting time yet —
-      common before a term's schedule is finalised.
+      common before a term's schedule is finalized.
       <button id="tbaShow" class="ghost tiny">Show them</button>`;
     $("#tbaShow").addEventListener("click", () => {
       $("#includeTba").checked = true;
@@ -677,8 +677,10 @@ async function loadPlan() {
     state.plan = new Map();
     $("#planCount").textContent = "0";
     renderPlan();
-    $("#planReport").innerHTML = `<p class="hint">Add courses to your plan to see
-      the full requirement check.</p>`;
+    $("#planReport").innerHTML = `<div class="notofficial">
+      <b>This is a self-check, not an approval.</b> The MDE program office
+      reviews and approves every elective selection.</div>
+      <p class="hint">Add courses to your plan to see the full policy check.</p>`;
     renderGrid();
     return;
   }
@@ -725,9 +727,19 @@ function renderReport(r) {
   const cores = (r.cores || []).length
     ? `<p class="hint">Cores this term (not electives): ${r.cores.map(esc).join(", ")}</p>` : "";
 
+  const needsReview = (r.unverifiable || []).length;
   box.innerHTML = `
+    <div class="notofficial">
+      <b>This is a self-check, not an approval.</b> The MDE program office
+      reviews and approves every elective selection. This tool reads the written
+      policy and can be wrong — cross-listings and SEAS-faculty judgements in
+      particular are inferred, not verified. Confirm anything that matters with
+      your program manager before you enroll.
+      ${needsReview ? `<span class="no-flag">${needsReview} item${
+        needsReview === 1 ? "" : "s"} below already need their confirmation.</span>` : ""}
+    </div>
     <div class="rep">
-      <h3>Requirement check
+      <h3>Policy self-check
         <span class="hint" style="font-weight:400">
           — ${r.counted_total} of ${r.electives_required} electives counted</span></h3>
       ${list(r.issues, "bad", "✗")}
