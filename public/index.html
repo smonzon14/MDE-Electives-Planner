@@ -10,6 +10,27 @@
 <link rel="icon" type="image/png" href="/mde_logo.png">
 <link rel="apple-touch-icon" href="/mde_logo.png">
 <link rel="stylesheet" href="/styles.css">
+<script>
+  // Vercel Web Analytics / Speed Insights.
+  //
+  // The documented setup is `npm i @vercel/analytics` plus a React component,
+  // but this app has no npm, no bundler and no framework. For a plain static
+  // site Vercel serves the collector itself from /_vercel/... once the feature
+  // is switched on for the project, so a script tag is the whole integration.
+  //
+  // Injected rather than hard-coded so it is skipped on localhost, where those
+  // paths 404 and would only add console noise during development.
+  (function () {
+    if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+    for (const path of ["/_vercel/insights/script.js",
+                        "/_vercel/speed-insights/script.js"]) {
+      const el = document.createElement("script");
+      el.defer = true;
+      el.src = path;
+      document.head.appendChild(el);
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -205,8 +226,9 @@
     </ol>
 
     <p class="wprivacy">
-      Everything stays in this browser. There is no account, no login, and your
-      password, MFA code and cookies are never sent to this site.
+      Your profile, schedule and plan stay in this browser. There is no account,
+      no login, and your password, MFA code and cookies are never sent to this
+      site. The site records anonymous page-view counts, and nothing else.
     </p>
     <p class="wnotofficial">
       <b>It does not approve anything.</b> The MDE program office reviews every

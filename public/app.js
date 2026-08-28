@@ -226,7 +226,8 @@ function renderOnboarding() {
   $("#firstRunText").innerHTML = needsImport && needsProfile
     ? `<b>Two things make this useful.</b> Import your enrolled classes so search
        can route around them, and set your background so eligibility is accurate.
-       Everything stays in this browser — there is no account and nothing is uploaded.`
+       Your schedule and plan stay in this browser — there is no account, and
+       they are never sent to the server.`
     : needsImport
       ? `<b>Import your enrolled classes</b> so search can route around them.
          Without them, every course looks like it fits.`
