@@ -97,6 +97,15 @@ MIGRATIONS = {
         # see location"), so every Harvard meeting leaves this NULL.
         ("location", "TEXT"),
     ],
+    "ingest_runs": [
+        # Which pass wrote this row: 'crawl' (my.harvard), 'mit_times',
+        # 'hbs_notes'. NULL on rows written before this column existed, which
+        # are all crawls. Lets /api/meta report per-source freshness, so a
+        # silently stale MIT feed is visible instead of hiding behind a fresh
+        # Harvard crawl.
+        ("source", "TEXT"),
+        ("detail", "TEXT"),        # one-line human summary of what the pass did
+    ],
     "courses": [
         # HBS MBA cross-registrant auditor rule, scraped by ingest/hbs_notes.py
         # from the HBS catalog because my.harvard stores only a link to it.
@@ -232,18 +241,38 @@ def upsert_courses(conn: sqlite3.Connection, courses: list["Course"]) -> dict:
     return stats
 
 
-def start_run(conn: sqlite3.Connection, term: str) -> int:
+def start_run(conn: sqlite3.Connection, term: str, source: str = "crawl") -> int:
     cur = conn.execute(
-        "INSERT INTO ingest_runs (term, started_at, status) VALUES (?,?,?)",
-        (term, now_iso(), "running"),
+        "INSERT INTO ingest_runs (term, started_at, status, source) VALUES (?,?,?,?)",
+        (term, now_iso(), "running", source),
     )
     conn.commit()
     return cur.lastrowid
 
 
-def finish_run(conn, run_id: int, pages: int, courses: int, status: str = "ok") -> None:
+def finish_run(conn, run_id: int, pages: int, courses: int, status: str = "ok",
+               detail: str | None = None) -> None:
     conn.execute(
-        "UPDATE ingest_runs SET finished_at=?, pages=?, courses=?, status=? WHERE id=?",
-        (now_iso(), pages, courses, status, run_id),
+        "UPDATE ingest_runs SET finished_at=?, pages=?, courses=?, status=?, detail=? "
+        "WHERE id=?",
+        (now_iso(), pages, courses, status, detail, run_id),
+    )
+    conn.commit()
+
+
+def record_run(conn: sqlite3.Connection, source: str, term: str, status: str,
+               courses: int = 0, detail: str | None = None) -> None:
+    """Log a complete one-shot pass (hbs_notes, mit_times) in a single row.
+
+    These finish in seconds, so unlike the crawl there is no useful "running"
+    state to write first. Failures are recorded too -- that is the whole point:
+    the workflow lets an enrichment pass fail without failing the run, so
+    without a row here a stale MIT feed would be invisible.
+    """
+    ts = now_iso()
+    conn.execute(
+        "INSERT INTO ingest_runs (term, started_at, finished_at, courses, status, "
+        "source, detail) VALUES (?,?,?,?,?,?,?)",
+        (term, ts, ts, courses, status, source, detail),
     )
     conn.commit()

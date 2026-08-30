@@ -441,6 +441,35 @@ to an untimed NONH listing. Real MIT times made it redundant and it is gone,
 along with the `/api/courses/untimed` endpoint that fed its picker. Blocks
 already saved with a course link keep working.
 
+## Is each source actually fresh?
+
+"Catalog updated 10 minutes ago" in the header refers to the **my.harvard crawl
+only**. That became misleading once two independent, third-party-dependent
+passes were added, because the refresh deliberately lets an enrichment pass fail
+*without* failing the run — a feed being down must not discard a finished
+ten-minute crawl. So a fresh Harvard crawl could sit on top of an MIT feed that
+had not updated in days, and nothing would say so.
+
+Every pass now records itself in `ingest_runs` (`source`, `detail`), and the
+info dot beside that line breaks it down:
+
+```
+SOURCES LAST REFRESHED
+Harvard catalog (my.harvard)                    4 days ago
+MIT times & rooms                              just now
+HBS auditor policy                          3 minutes ago
+```
+
+Each row shows when the data was last **actually refreshed**, not when we last
+tried. If the most recent attempt failed, the row turns red and says so while
+still reporting the last good timestamp — hover for the error and the pass's own
+summary (`1232 timed, 1227 with a room; MIT feed updated 2026-08-30 21:01`,
+which carries MIT's own publication time, not just ours).
+
+`skipped` is not a failure and never sets the status: MIT publishes only its
+current term, so every other term legitimately skips, and letting that count
+made a healthy feed read as skipped purely because Spring ran last.
+
 ## Links back to my.harvard
 
 Every course code, title, week-grid block, combination row and sidebar entry

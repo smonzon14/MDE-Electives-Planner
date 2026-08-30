@@ -43,7 +43,7 @@ from config import (
     DAY_NAMES, DEFAULT_TERM, MAX_RETRIES, REQUEST_DELAY_SEC, REQUEST_TIMEOUT_SEC,
     USER_AGENT,
 )
-from ingest.db import connect
+from ingest.db import connect, record_run
 from ingest.parse import minutes_to_label
 
 FEED_URL = "https://hydrant.mit.edu/latest.json"
@@ -139,7 +139,16 @@ def date_range(cls: dict, info: dict) -> tuple[str | None, str | None]:
 
 
 def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
-    data = fetch(url)
+    # A fetch failure has to be recorded, not just raised: the workflow lets
+    # this pass fail without failing the run, so an unrecorded failure would
+    # leave the UI showing whatever timestamp the last good run wrote.
+    try:
+        data = fetch(url)
+    except Exception as e:  # noqa: BLE001
+        conn = connect()
+        record_run(conn, "mit_times", term, f"error: {e}"[:200])
+        conn.close()
+        raise
     info = data.get("termInfo") or {}
     feed = feed_term(info.get("urlName", ""))
     classes = data.get("classes") or {}
@@ -150,6 +159,10 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
     # (and the reason this is a no-op rather than an error).
     if feed != term:
         print(f"term={term!r}: feed covers {feed!r} -- nothing to do")
+        conn = connect()
+        record_run(conn, "mit_times", term, "skipped",
+                   detail=f"MIT publishes only its current term ({feed})")
+        conn.close()
         return {"matched": 0, "timed": 0, "ambiguous": 0, "unmatched": 0}
 
     conn = connect()
@@ -159,6 +172,7 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
     ).fetchall()
     if not rows:
         print(f"term={term!r}: no MIT listings in the catalog")
+        record_run(conn, "mit_times", term, "skipped", detail="no MIT listings in the catalog")
         conn.close()
         return {"matched": 0, "timed": 0, "ambiguous": 0, "unmatched": 0}
 
@@ -199,6 +213,11 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
         roomed += bool(room)
 
     conn.commit()
+    # The feed's own timestamp matters as much as ours: it says how fresh MIT's
+    # data is, independent of when we last managed to fetch it.
+    record_run(conn, "mit_times", term, "ok", courses=timed,
+               detail=f"{timed} timed, {roomed} with a room; MIT feed updated "
+                      f"{data.get('lastUpdated', 'unknown')}")
     conn.close()
     print(f"done: {len(rows)} MIT listing(s)  matched={matched}  timed={timed}  "
           f"({meetings_written} meetings, {roomed} with a room)  "

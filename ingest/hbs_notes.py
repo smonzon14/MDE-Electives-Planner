@@ -34,7 +34,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import DEFAULT_TERM, MAX_RETRIES, REQUEST_DELAY_SEC, REQUEST_TIMEOUT_SEC, USER_AGENT
-from ingest.db import connect
+from ingest.db import connect, record_run
 
 CATALOG_HOST = "coursecatalog.mba.hbs.edu"
 API = f"https://{CATALOG_HOST}/api/?page=fose&route="
@@ -143,6 +143,8 @@ def tag(term: str = DEFAULT_TERM, delay: float = REQUEST_DELAY_SEC) -> dict:
     ]
     if not rows:
         print(f"term={term!r}: no HBS MBA sections in the catalog -- nothing to tag")
+        record_run(conn, "hbs_notes", term, "skipped",
+                   detail="no HBS MBA sections in the catalog")
         conn.close()
         return {"sections": 0, "tagged": 0, "unmatched": 0, "unclassified": 0}
 
@@ -191,6 +193,9 @@ def tag(term: str = DEFAULT_TERM, delay: float = REQUEST_DELAY_SEC) -> dict:
         time.sleep(delay)
 
     conn.commit()
+    record_run(conn, "hbs_notes", term, "ok", courses=tagged,
+               detail=f"{tagged} sections tagged; {counts['open']} open, "
+                      f"{counts['limited']} fellows-only, {counts['closed']} closed")
     conn.close()
     print(f"done: {tagged}/{len(rows)} section(s) tagged  "
           f"open={counts['open']}  limited={counts['limited']}  closed={counts['closed']}  "

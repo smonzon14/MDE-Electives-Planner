@@ -330,6 +330,59 @@ def health():
             "db_bytes": db_file.stat().st_size if db_file.exists() else None}
 
 
+# Every pass that can independently go stale. The whole point of reporting these
+# separately is that the workflow deliberately lets an enrichment pass fail
+# WITHOUT failing the run (a third-party feed being down must not discard a good
+# crawl) -- so a fresh Harvard crawl can otherwise mask an MIT feed that has not
+# updated in days.
+SOURCE_LABELS = {
+    "crawl": "Harvard catalog (my.harvard)",
+    "mit_times": "MIT times & rooms",
+    "hbs_notes": "HBS auditor policy",
+}
+
+
+def _source_freshness(conn) -> list[dict]:
+    """Per source: the last attempt, and the last one that actually worked."""
+    out = []
+    for source, label in SOURCE_LABELS.items():
+        # "skipped" is not an outcome worth reporting -- it means the pass had
+        # nothing to do for that term (MIT publishes only its current term, so
+        # every other term legitimately skips). Reporting it as the status made
+        # a healthy MIT feed read as skipped purely because Spring ran last.
+        latest = conn.execute(
+            "SELECT * FROM ingest_runs WHERE (source = ? OR (? = 'crawl' AND source IS NULL)) "
+            "AND status != 'skipped' ORDER BY id DESC LIMIT 1",
+            (source, source),
+        ).fetchone()
+        if latest is None:
+            latest = conn.execute(
+                "SELECT * FROM ingest_runs WHERE (source = ? OR (? = 'crawl' AND source IS NULL)) "
+                "ORDER BY id DESC LIMIT 1",
+                (source, source),
+            ).fetchone()
+        if latest is None:
+            continue
+        good = conn.execute(
+            "SELECT * FROM ingest_runs WHERE (source = ? OR (? = 'crawl' AND source IS NULL)) "
+            "AND status = 'ok' AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1",
+            (source, source),
+        ).fetchone()
+        latest, good = dict(latest), (dict(good) if good else None)
+        out.append({
+            "source": source,
+            "label": label,
+            "status": latest["status"],
+            # `ok_at` is what the UI shows: when the data was last actually
+            # refreshed, which is not the same as when we last tried.
+            "ok_at": good["finished_at"] if good else None,
+            "attempted_at": latest["finished_at"] or latest["started_at"],
+            "detail": (good or latest).get("detail"),
+            "term": (good or latest).get("term"),
+        })
+    return out
+
+
 @app.get("/api/meta")
 def meta():
     conn = db()
@@ -339,7 +392,20 @@ def meta():
     schools = [r[0] for r in conn.execute(
         "SELECT DISTINCT school FROM courses WHERE school != '' ORDER BY school"
     ).fetchall()]
-    last = conn.execute("SELECT * FROM ingest_runs ORDER BY id DESC LIMIT 1").fetchone()
+    # `source` arrives via ingest/db.py MIGRATIONS, and the catalog is a build
+    # artifact that can predate it -- so check before querying on it, the same
+    # way `crosslists` is checked below.
+    has_source = any(r["name"] == "source"
+                     for r in conn.execute("PRAGMA table_info(ingest_runs)"))
+    if has_source:
+        # NULL source means a row written before the column existed; those are
+        # all crawls.
+        last = conn.execute(
+            "SELECT * FROM ingest_runs WHERE source = 'crawl' OR source IS NULL "
+            "ORDER BY id DESC LIMIT 1").fetchone()
+    else:
+        last = conn.execute("SELECT * FROM ingest_runs ORDER BY id DESC LIMIT 1").fetchone()
+    sources = _source_freshness(conn) if has_source else []
     n_xl = conn.execute("SELECT COUNT(DISTINCT group_id) FROM crosslists").fetchone()[0] \
         if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='crosslists'").fetchone() else 0
     conn.close()
@@ -348,6 +414,7 @@ def meta():
         "terms": terms,
         "schools": schools,
         "last_ingest": dict(last) if last else None,
+        "sources": sources,
         "crosslist_groups": n_xl,
         "policy": POLICY.as_dict(),
     }
