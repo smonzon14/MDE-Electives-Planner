@@ -323,8 +323,28 @@ function renderMeta() {
     [`Policy rev. ${state.policy.policy_version}`, ""],
     ["Last ingest", when],
   ];
+
+  // Per-source freshness. "Catalog updated 10 minutes ago" above refers to the
+  // my.harvard crawl only, and the refresh deliberately lets an enrichment pass
+  // fail without failing the run -- so a fresh Harvard crawl can sit on top of
+  // an MIT feed that has not updated in days. These rows are what make that
+  // visible; each shows when the data was last actually REFRESHED, not when we
+  // last tried.
+  const sources = (state.meta.sources || []).map((s) => {
+    const ok = String(s.status || "").startsWith("ok");
+    const ago = timeAgo(s.ok_at);
+    const value = !s.ok_at ? "never"
+      : ok ? ago
+      : `${ago} \u2014 last attempt failed`;
+    const tip = [s.detail, s.term, ok ? "" : `status: ${s.status}`]
+      .filter(Boolean).join(" \u00b7 ");
+    return `<div class="${ok ? "" : "stale"}" title="${esc(tip)}"><b>${
+      esc(s.label)}</b><span>${esc(value)}</span></div>`;
+  });
+
   $("#metaDetails").innerHTML = rows.map(
-    ([a, b]) => `<div><b>${esc(a)}</b>${b ? `<span>${esc(b)}</span>` : ""}</div>`).join("");
+    ([a, b]) => `<div><b>${esc(a)}</b>${b ? `<span>${esc(b)}</span>` : ""}</div>`).join("")
+    + (sources.length ? `<div class="pop-sec">Sources last refreshed</div>${sources.join("")}` : "");
   $("#metaInfo").hidden = false;
 }
 

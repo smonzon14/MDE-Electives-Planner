@@ -433,6 +433,17 @@ button.danger:hover { border-color: var(--bad); }
 .infopop div + div { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .infopop b { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .infopop span { color: var(--muted); text-align: right; white-space: nowrap; }
+/* Section divider inside the catalog panel, for the per-source rows. */
+.infopop .pop-sec { display: block; margin-top: 8px; padding-top: 7px;
+                    border-top: 1px solid var(--line); font-size: 10px;
+                    font-weight: 700; text-transform: uppercase;
+                    letter-spacing: .05em; color: var(--muted); }
+.infopop .pop-sec + div { border-top: 0; padding-top: 2px; margin-top: 2px; }
+/* A source whose last attempt failed: the timestamp is the last GOOD one, so
+   it must not read as healthy. The message is longer than a timestamp and
+   .infopop span is nowrap, which clipped it against the panel's max-width --
+   so this one wraps instead. */
+.infopop .stale span { color: var(--bad); white-space: normal; text-align: right; }
 
 /* ---- first-run welcome ---- */
 /* Heavier than a normal task modal: this one has to read as "start here", not

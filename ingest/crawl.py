@@ -112,7 +112,9 @@ def crawl(term: str = DEFAULT_TERM, max_pages: int | None = None,
         status = f"error: {e}"
         print(f"\nfailed: {e}")
     finally:
-        finish_run(conn, run_id, page, seen, status)
+        finish_run(conn, run_id, page, seen, status,
+                   detail=f"{seen} cards fetched over {page} page(s); "
+                          f"new={totals['new']}, changed={totals['changed']}")
 
     stored = conn.execute(
         "SELECT COUNT(*) FROM courses WHERE term = ?", (term,)
