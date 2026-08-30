@@ -14,7 +14,16 @@ name: Refresh catalog
 
 on:
   schedule:
-    # Every 8 hours, at :37 rather than :00. GitHub queues scheduled runs behind
+    # CADENCE FOLLOWS THE SHOPPING CALENDAR. Course times move daily while
+    # people are shopping and barely at all the rest of the year, so paying for
+    # three crawls a day in February bought nothing. August and September get
+    # the old every-8-hours cadence; the other ten months get one run a day.
+    #
+    # A full run is ~27 minutes of metered time. At 3/day year-round that is
+    # ~2,430 min/month against a 2,000-minute free allowance; this split is
+    # ~1,000 min/month averaged over a year.
+    #
+    # :37 rather than the top of the hour. GitHub queues scheduled runs behind
     # the platform's load, and the top of the hour is its worst spike -- on minute
     # 0 this repo saw every fire created 157-213 minutes after its slot, and the
     # 10:00 slot on 2026-08-28 was dropped outright. An odd minute avoids the
@@ -26,12 +35,12 @@ on:
     # GitHub cron has no timezone support, so these drift an hour in winter --
     # fine for a catalog. Scheduled runs are also disabled after 60 days with no
     # repo activity.
-    #
-    # Not more slots than this: a full run is ~27 minutes of metered time on a
-    # private repo, so 3/day is already ~2,430 min/month against a 2,000-minute
-    # free allowance. There is no early exit that avoids the cost -- the crawl
-    # always runs before anything can detect that nothing changed.
-    - cron: "37 2,10,18 * * *"
+
+    # Shopping season (Aug, Sep): every 8 hours.
+    - cron: "37 2,10,18 * 8,9 *"
+    # The rest of the year: once a day.
+    - cron: "37 10 * 1-7,10-12 *"
+
   workflow_dispatch:
     inputs:
       terms:

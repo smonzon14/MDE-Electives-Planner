@@ -125,18 +125,26 @@ the wrong tool three times over:
 | Costs bandwidth | Separate 1 GB/month transfer quota, consumed by every checkout |
 | **Breaks the build** | Vercel does not fetch LFS objects — it would deploy the ~130-byte pointer file, and SQLite would report the catalog as corrupt |
 
-### Two secrets this needs
+### The one secret this needs
 
 | Where | Name | Value |
 |---|---|---|
-| Vercel → Settings → Environment Variables | `CATALOG_TOKEN` | A fine-grained PAT scoped to this one repo, **Contents: Read-only**. Required because a private repo's release assets are not publicly readable. |
 | GitHub → Settings → Secrets → Actions | `VERCEL_DEPLOY_HOOK` | A Vercel Deploy Hook URL (Project → Settings → Git → Deploy Hooks). Needed because a refresh no longer pushes to git, so nothing would otherwise trigger a deploy. |
 
-Without `CATALOG_TOKEN` the build **fails**, deliberately. There is no
-fallback: the catalog is not in git, so the alternative would be deploying an
+**No `CATALOG_TOKEN` any more.** The repository is public, so the release asset
+is fetched from its unauthenticated redirect URL
+(`github.com/<repo>/releases/download/catalog/courses.db`). That removed a
+fine-grained PAT, a GitHub API round trip, and any exposure to the
+60-requests/hour unauthenticated API limit that Vercel's shared build IPs would
+have had to share. **If the repo is ever made private again, the build breaks** —
+restore the token and the API-based lookup together.
+
+The build still **fails deliberately** if the catalog can't be fetched. There is
+no fallback: the catalog is not in git, so the alternative would be deploying an
 app whose every request 503s. Vercel keeps the previous deployment live when a
-build fails, so a bad token means "stops updating", not "goes down". Without `VERCEL_DEPLOY_HOOK` the job warns and the new
-catalog simply waits for the next deploy.
+build fails, so a failed fetch means "stops updating", not "goes down". Without
+`VERCEL_DEPLOY_HOOK` the job warns and the new catalog simply waits for the next
+deploy.
 
 `GET /api/health` reports `catalog_source`, which is the thing to check after a
 deploy:
