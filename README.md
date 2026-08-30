@@ -386,6 +386,34 @@ MIT also publishes half-term flags, so `1.010A` (Sep 9 – Oct 23) stops
 conflicting with `1.010B` (Oct 26 – Dec 10) the same way `ingest/dates.py` fixes
 that for Harvard. Meetings from this source are tagged `date_source='mit_feed'`.
 
+### Rooms: MIT only, and not by choice
+
+The same feed carries the room, so **1,227 of the 1,232 timed MIT courses** get
+one (`5-234`, `E51-315`, `W41-1401` — MIT numbers its buildings). It costs
+nothing: it arrives in the request already being made, and was simply being
+discarded. It shows next to the meeting time on the course card and in the
+calendar block's hover text.
+
+**Harvard rooms are not obtainable, and no amount of scraping will change that.**
+This was checked properly rather than assumed:
+
+| Source | Result |
+|---|---|
+| Search card `<!-- Begin: Location -->` block | present but **empty on 90/90** sampled cards |
+| Course detail page | says `Cambridge Campus` then **"Sign In to see location"** |
+| Campus on the search card | **not there** — detail page only, ~7,600 extra requests |
+
+my.harvard puts room-level location behind HarvardKey. Getting it would mean
+authenticating as the student, and this app has no login and never sends
+anything that identifies a student to the server — see the top of this file.
+So `meetings.location` is NULL for every Harvard meeting, and the UI renders
+those rows exactly as it did before.
+
+The one legitimate route would be the browser extension, which already reads the
+student's own my.harvard calendar with their own cookies, client-side. That
+could show rooms for the classes they are *enrolled in* — never for the catalog
+at large. Not built.
+
 **A display fix came with this.** my.harvard's search-card badge splits a code
 into subject + catalog, and MIT's dot-numbering defeats it: `MIT 1.000` is stored
 as subject `MIT`, catalog `1`. Every NONH listing therefore rendered as "MIT 1"

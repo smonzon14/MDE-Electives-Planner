@@ -54,6 +54,13 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 const MYHARVARD = "https://my.harvard.edu";
 const courseUrl = (c) => (c && c.detail_url) ? MYHARVARD + c.detail_url : null;
 
+// A meeting's room, where the source publishes one. Only MIT does: my.harvard
+// gates room-level location behind HarvardKey ("Sign In to see location"), so
+// Harvard meetings carry no location and render exactly as they did before.
+const meetingTime = (m) =>
+  `${m.days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(m.start_min)}\u2013${fmt(m.end_min)}`
+  + (m.location ? ` \u00b7 ${m.location}` : "");
+
 // my.harvard's card badge splits a code into subject + catalog, and MIT's
 // dot-numbering defeats it: "MIT 1.000" is stored as subject "MIT", catalog "1",
 // so every one of the ~1,987 NONH listings renders as "MIT 1" / "MIT 6" and
@@ -635,7 +642,7 @@ function closeAudits(root = document) {
 
 function courseCard(c, inPlan) {
   const times = c.meetings.length
-    ? c.meetings.map((m) => `${m.days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(m.start_min)}–${fmt(m.end_min)}`).join(" · ")
+    ? c.meetings.map(meetingTime).join(" · ")
     : "No fixed meeting time";
   // Three distinct states, most severe first:
   //   locked clash  -> collides with an enrolled course or a custom block
@@ -1078,8 +1085,12 @@ function renderGrid() {
     for (const m of it.meetings) {
       for (let d = 0; d < 7; d++) {
         if (m.day_mask & (1 << d)) {
+          // The room belongs to the meeting, not the course, so it wins over
+          // the item-level detail. Locked manual blocks have no location and
+          // keep showing their date range.
           place(d, m.start_min, m.end_min, cls, it.label,
-                `${fmt(m.start_min)}–${fmt(m.end_min)}`, it.url, it.removeAttr, it.detail);
+                `${fmt(m.start_min)}–${fmt(m.end_min)}`, it.url, it.removeAttr,
+                m.location || it.detail);
         }
       }
     }

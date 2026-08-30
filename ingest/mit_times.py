@@ -74,10 +74,12 @@ def decode_slot(slot: int) -> tuple[int, int]:
     return day + 1, GRID_START_MIN + offset * 30
 
 
-def lecture_pattern(cls: dict) -> list[list[int]] | None:
-    """The class's one agreed lecture pattern, or None if there isn't exactly one.
+def lecture_pattern(cls: dict) -> tuple[list[list[int]], str] | None:
+    """The class's one agreed lecture pattern and room, or None if ambiguous.
 
-    Returns Hydrant's raw [[start_slot, half_hours], ...] list.
+    Returns (Hydrant's raw [[start_slot, half_hours], ...], room). The room is
+    dropped when the agreeing sections disagree about it, which is rare but
+    would otherwise put one section's room on another's meeting.
     """
     sections = cls.get("lectureSections") or []
     if not sections:
@@ -86,7 +88,10 @@ def lecture_pattern(cls: dict) -> list[list[int]] | None:
     if len(patterns) != 1:
         return None          # alternative meeting times -- ambiguous, so skip
     pattern = [list(s) for s in patterns.pop()]
-    return pattern or None
+    if not pattern:
+        return None
+    rooms = {(sec[1] or "").strip() for sec in sections}
+    return pattern, (rooms.pop() if len(rooms) == 1 else "")
 
 
 def to_meetings(pattern: list[list[int]]) -> list[tuple[int, int, int]]:
@@ -139,7 +144,7 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
         conn.close()
         return {"matched": 0, "timed": 0, "ambiguous": 0, "unmatched": 0}
 
-    matched = timed = ambiguous = unmatched = 0
+    matched = timed = ambiguous = unmatched = roomed = 0
     meetings_written = 0
 
     for r in rows:
@@ -152,10 +157,11 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
             continue
         matched += 1
 
-        pattern = lecture_pattern(cls)
-        if pattern is None:
+        found = lecture_pattern(cls)
+        if found is None:
             ambiguous += 1
             continue
+        pattern, room = found
 
         start_date, end_date = date_range(cls, info)
         # Replace rather than append: this pass has to be idempotent, and a
@@ -164,19 +170,23 @@ def backfill(term: str = DEFAULT_TERM, url: str = FEED_URL) -> dict:
         for mask, start, end in to_meetings(pattern):
             conn.execute(
                 """INSERT INTO meetings (course_key, day_mask, start_min, end_min,
-                                         raw_time, start_date, end_date, date_source)
-                   VALUES (?,?,?,?,?,?,?,'mit_feed')""",
-                (r["key"], mask, start, end, _label(mask, start, end), start_date, end_date),
+                                         raw_time, start_date, end_date, date_source,
+                                         location)
+                   VALUES (?,?,?,?,?,?,?,'mit_feed',?)""",
+                (r["key"], mask, start, end, _label(mask, start, end), start_date,
+                 end_date, room or None),
             )
             meetings_written += 1
         timed += 1
+        roomed += bool(room)
 
     conn.commit()
     conn.close()
     print(f"done: {len(rows)} MIT listing(s)  matched={matched}  timed={timed}  "
-          f"({meetings_written} meetings)  no-single-pattern={ambiguous}  unmatched={unmatched}")
+          f"({meetings_written} meetings, {roomed} with a room)  "
+          f"no-single-pattern={ambiguous}  unmatched={unmatched}")
     return {"matched": matched, "timed": timed, "ambiguous": ambiguous,
-            "unmatched": unmatched, "meetings": meetings_written}
+            "unmatched": unmatched, "meetings": meetings_written, "roomed": roomed}
 
 
 def _label(mask: int, start: int, end: int) -> str:

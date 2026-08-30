@@ -255,6 +255,7 @@ def _attach_meetings(conn, courses: list[dict]) -> None:
                 "start_date": m["start_date"],
                 "end_date": m["end_date"],
                 "date_source": m["date_source"],
+                "location": m["location"],
                 "days": [DAY_NAMES[i] for i in range(7) if m["day_mask"] & (1 << i)],
             })
     for c in courses:
