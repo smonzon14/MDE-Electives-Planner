@@ -220,8 +220,15 @@ button.tiny { padding: 2px 8px; font-size: 11px; }
 .flabel { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
 /* ---- modal ---- */
+/* ORDERING (one stack, highest last): infopop 45 < grid fab 6* < schedule
+   drawer scrim 69 < drawer 70 < schedfab 65* < modal 80 < toast 90.
+   The modal MUST outrank the mobile schedule drawer (.schedpane, z-index 70):
+   "+ Block" lives inside that drawer, so at z-index 50 the editor it opens
+   rendered *behind* the very panel it was launched from and was unreachable on
+   a phone. Toasts stay above the modal, as they always did.
+   (*fab/schedfab sit in their own stacking contexts.) */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45);
-         display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+         display: flex; align-items: center; justify-content: center; z-index: 80; padding: 20px; }
 /* display:flex would otherwise override the [hidden] attribute's display:none */
 .modal[hidden] { display: none; }
 .modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
@@ -340,7 +347,7 @@ button.danger:hover { border-color: var(--bad); }
 .fr-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 /* ---- toast ---- */
-.toast { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: 380px;
+.toast { position: fixed; right: 16px; bottom: 16px; z-index: 90; max-width: 380px;
          padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.45;
          background: var(--panel); border: 1px solid var(--line);
          box-shadow: 0 8px 28px rgba(0,0,0,.18); }
