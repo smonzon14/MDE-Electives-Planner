@@ -14,7 +14,16 @@ name: Refresh catalog
 
 on:
   schedule:
-    # Every 8 hours, at :37 rather than :00. GitHub queues scheduled runs behind
+    # CADENCE FOLLOWS THE SHOPPING CALENDAR. Course times move daily while
+    # people are shopping and barely at all the rest of the year, so paying for
+    # three crawls a day in February bought nothing. August and September get
+    # the old every-8-hours cadence; the other ten months get one run a day.
+    #
+    # A full run is ~27 minutes of metered time. At 3/day year-round that is
+    # ~2,430 min/month against a 2,000-minute free allowance; this split is
+    # ~1,000 min/month averaged over a year.
+    #
+    # :37 rather than the top of the hour. GitHub queues scheduled runs behind
     # the platform's load, and the top of the hour is its worst spike -- on minute
     # 0 this repo saw every fire created 157-213 minutes after its slot, and the
     # 10:00 slot on 2026-08-28 was dropped outright. An odd minute avoids the
@@ -26,12 +35,12 @@ on:
     # GitHub cron has no timezone support, so these drift an hour in winter --
     # fine for a catalog. Scheduled runs are also disabled after 60 days with no
     # repo activity.
-    #
-    # Not more slots than this: a full run is ~27 minutes of metered time on a
-    # private repo, so 3/day is already ~2,430 min/month against a 2,000-minute
-    # free allowance. There is no early exit that avoids the cost -- the crawl
-    # always runs before anything can detect that nothing changed.
-    - cron: "37 2,10,18 * * *"
+
+    # Shopping season (Aug, Sep): every 8 hours.
+    - cron: "37 2,10,18 * 8,9 *"
+    # The rest of the year: once a day.
+    - cron: "37 10 * 1-7,10-12 *"
+
   workflow_dispatch:
     inputs:
       terms:
@@ -107,7 +116,7 @@ jobs:
       # One pass per term: crawl, then backfill dates, then detect cross-listings.
       # Cross-listing detection is per-term by nature (it groups courses sharing
       # an instructor and meeting time), so it cannot be hoisted out of the loop.
-      - name: Crawl, date and cross-list every term
+      - name: Crawl, date, tag and cross-list every term
         run: |
           set -euo pipefail
           TERM_LIST="${{ inputs.terms }}"
@@ -130,6 +139,21 @@ jobs:
             # detail pages. Without them, two 7-week courses in opposite halves
             # of the term look like a conflict.
             python -m ingest.dates --term "$term"
+
+            # HBS MBA sections have no course text on my.harvard -- their
+            # description is a bare link to the HBS catalog -- so the auditor
+            # rule, which decides whether an MDE student can sit in at all, is
+            # scraped from that catalog. ~90 requests, and a no-op for terms
+            # with no MBA sections posted yet.
+            python -m ingest.hbs_notes --term "$term"
+
+            # my.harvard publishes NO meeting time for any of its ~1,987
+            # NONH/MIT cross-registration listings. MIT serves its whole term
+            # as one JSON document, so this is a SINGLE request that times
+            # ~1,200 of them. It only ever fills in times on courses
+            # my.harvard already lists; MIT-only classes are ignored.
+            python -m ingest.mit_times --term "$term"
+
             python -m ingest.crosslist "$term"
             echo "::endgroup::"
           done

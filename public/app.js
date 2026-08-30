@@ -53,6 +53,27 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 // my.harvard stores detail_url as "/course/COMPSCI2360R/2026-Fall/001".
 const MYHARVARD = "https://my.harvard.edu";
 const courseUrl = (c) => (c && c.detail_url) ? MYHARVARD + c.detail_url : null;
+
+// A meeting's room, where the source publishes one. Only MIT does: my.harvard
+// gates room-level location behind HarvardKey ("Sign In to see location"), so
+// Harvard meetings carry no location and render exactly as they did before.
+const meetingTime = (m) =>
+  `${m.days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(m.start_min)}\u2013${fmt(m.end_min)}`
+  + (m.location ? ` \u00b7 ${m.location}` : "");
+
+// my.harvard's card badge splits a code into subject + catalog, and MIT's
+// dot-numbering defeats it: "MIT 1.000" is stored as subject "MIT", catalog "1",
+// so every one of the ~1,987 NONH listings renders as "MIT 1" / "MIT 6" and
+// they are indistinguishable from each other. `code` is always intact, so where
+// the two halves don't reconstruct it, split `code` instead. Every other school
+// satisfies subject+catalog===code exactly, so nothing else changes.
+const codeLabel = (c) => {
+  const subject = c.subject || "", catalog = c.catalog || "", code = c.code || "";
+  if (subject + catalog === code) return `${subject} ${catalog}`;
+  return subject && code.startsWith(subject)
+    ? `${subject} ${code.slice(subject.length)}` : (code || `${subject} ${catalog}`);
+};
+
 const extLink = (c, label, cls = "") => {
   const u = courseUrl(c);
   return u
@@ -545,9 +566,83 @@ function policyBadges(pol) {
     }).join("");
 }
 
+// --------------------------------------------------- HBS auditor policy ---
+//
+// my.harvard has no course text for HBS MBA sections -- their description is a
+// bare link to the HBS catalog -- so ingest/hbs_notes.py scrapes the auditor
+// rule and stores it on the course. Only HBSM sections carry it; everything
+// else renders nothing.
+//
+// Three states, not two. Ten of the 2026 Fall sections accept ONLY ALI
+// Fellows, Harvard Fellows or postdocs, and an MDE student is none of those --
+// folding them into "open" would promise access that doesn't exist.
+const AUDIT = {
+  open:    { cls: "auditok",  label: "open to auditors" },
+  limited: { cls: "auditsome", label: "auditors: fellows only" },
+  closed:  { cls: "auditno",  label: "no auditors" },
+};
+
+// The note is HBS's own prose and carries the links a student has to follow
+// (the request form, the audit-process page), so escape it and then make the
+// URLs real anchors rather than dropping them into a title="" tooltip.
+function linkify(text) {
+  return esc(text).replace(/https?:\/\/[^\s<]+/g, (u) => {
+    const trail = u.match(/[.,;:]+$/);
+    const href = trail ? u.slice(0, -trail[0].length) : u;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`
+      + (trail ? trail[0] : "");
+  });
+}
+
+const auditPopId = (key) => `audit-${String(key).replace(/[^a-zA-Z0-9]+/g, "-")}`;
+
+function auditBadge(c) {
+  const a = AUDIT[c.auditors];
+  if (!a) return "";
+  const id = auditPopId(c.key);
+  // The popover is a SIBLING of the pill, not a child: .r-badges .badge sets
+  // overflow:hidden to keep long labels on one line, which would clip it.
+  return `<span class="auditwrap">
+      <span class="badge audit ${a.cls}">${a.label}<button type="button" class="infodot mini"
+        data-auditinfo="${id}" aria-controls="${id}" aria-expanded="false"
+        aria-label="What the HBS catalog says about auditing this section">i</button></span>
+      <div class="infopop auditpop" id="${id}" role="group" hidden>
+        <p class="pop-h">Cross-registrant auditors</p>
+        <p class="pop-b">${linkify(c.auditor_note || "")}</p>
+        <p class="pop-src">From the HBS course catalog. Stated per section, so
+          another section of the same course may differ.</p>
+      </div>
+    </span>`;
+}
+
+// Pinned popovers survive the pointer leaving, so someone can select the note
+// text or click through to the HBS request form inside it.
+let auditPinned = false;
+
+/** Hover to peek, click to pin -- the same idiom as the catalog info dot. */
+function toggleAudit(btn, force) {
+  const pop = document.getElementById(btn.dataset.auditinfo);
+  if (!pop) return;
+  const open = force !== undefined ? force : pop.hidden;
+  pop.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  pop.classList.remove("flip");
+  // Pills sit anywhere across the row, so a left-aligned panel can run off the
+  // right edge. Measure once it is visible and mirror it when it does.
+  if (open && pop.getBoundingClientRect().right > window.innerWidth - 8) {
+    pop.classList.add("flip");
+  }
+}
+
+function closeAudits(root = document) {
+  root.querySelectorAll(".auditpop:not([hidden])").forEach((p) => { p.hidden = true; });
+  root.querySelectorAll('[data-auditinfo][aria-expanded="true"]')
+    .forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
 function courseCard(c, inPlan) {
   const times = c.meetings.length
-    ? c.meetings.map((m) => `${m.days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(m.start_min)}–${fmt(m.end_min)}`).join(" · ")
+    ? c.meetings.map(meetingTime).join(" · ")
     : "No fixed meeting time";
   // Three distinct states, most severe first:
   //   locked clash  -> collides with an enrolled course or a custom block
@@ -579,7 +674,7 @@ function courseCard(c, inPlan) {
   return `
     <li data-key="${esc(c.key)}" class="${
       !clashes.length && planClashes.length ? "has-plan-clash" : ""}">
-      <div class="r-head">${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")}
+      <div class="r-head">${extLink(c, esc(codeLabel(c)), "r-code")}
         ${extLink(c, esc(c.title), "r-title")}</div>
       <div class="r-meta">
         ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
@@ -590,7 +685,7 @@ function courseCard(c, inPlan) {
           ${fit}
           <span class="badge level" title="${esc(pol.level_label || "")}">${
             esc(pol.level_short || pol.level_label || "")}</span>
-          ${policyBadges(pol)}${lists}${extra}
+          ${policyBadges(pol)}${lists}${extra}${auditBadge(c)}
         </div>
         <div class="r-actions">
           ${c.enrolled ? `<span class="badge req">enrolled</span>`
@@ -648,6 +743,21 @@ function wireCards(sel, source) {
     e.stopPropagation();
     await togglePlan(b.dataset.plan, b);
   }));
+  // stopPropagation throughout: the whole row is clickable, and the document
+  // handler below closes every popover on any other click.
+  $$(`${sel} [data-auditinfo]`).forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasOpen = b.getAttribute("aria-expanded") === "true";
+      closeAudits();
+      toggleAudit(b, !wasOpen);
+      auditPinned = !wasOpen;
+    });
+    b.addEventListener("mouseenter", () => { if (!auditPinned) toggleAudit(b, true); });
+  });
+  $$(`${sel} .auditwrap`).forEach((w) => {
+    w.addEventListener("mouseleave", () => { if (!auditPinned) closeAudits(w); });
+  });
 }
 
 // ------------------------------------------------------------------ plan ---
@@ -832,7 +942,7 @@ function gridItems() {
     // plan candidates would paint purple over the crimson and misrepresent them.
     if (c.enrolled) return;
     items.push({
-      kind: "pinned", label: `${c.subject} ${c.catalog}`, url: courseUrl(c),
+      kind: "pinned", label: codeLabel(c), url: courseUrl(c),
       removeAttr: `data-rm-plan="${esc(c.key)}"`, meetings: c.meetings, detail: "",
     });
   });
@@ -975,8 +1085,12 @@ function renderGrid() {
     for (const m of it.meetings) {
       for (let d = 0; d < 7; d++) {
         if (m.day_mask & (1 << d)) {
+          // The room belongs to the meeting, not the course, so it wins over
+          // the item-level detail. Locked manual blocks have no location and
+          // keep showing their date range.
           place(d, m.start_min, m.end_min, cls, it.label,
-                `${fmt(m.start_min)}–${fmt(m.end_min)}`, it.url, it.removeAttr, it.detail);
+                `${fmt(m.start_min)}–${fmt(m.end_min)}`, it.url, it.removeAttr,
+                m.location || it.detail);
         }
       }
     }
@@ -987,7 +1101,7 @@ function renderGrid() {
   // blue would paint over it and misrepresent it.
   for (const pv of state.preview) {
     if (!pv || state.plan.has(pv.key)) continue;
-    draw({ label: `${pv.subject} ${pv.catalog}`, url: courseUrl(pv),
+    draw({ label: codeLabel(pv), url: courseUrl(pv),
            meetings: pv.meetings, removeAttr: "", detail: "" }, "ev-preview");
   }
 
@@ -1135,7 +1249,7 @@ function renderCombos() {
         </div>
         ${combo.map((c, si) => `<div class="row">
           <span class="slotno">${si + 1}</span>
-          ${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")} ${extLink(c, esc(c.title))}
+          ${extLink(c, esc(codeLabel(c)), "r-code")} ${extLink(c, esc(c.title))}
           <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
             m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
             fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
@@ -1414,7 +1528,11 @@ function importData(file) {
 
 // ----------------------------------------------------------- block editor ---
 
-const blockState = { kind: "obligation", courseKey: "", days: new Set() };
+// Blocks are obligations only now. MIT cross-registrations used to be entered
+// here as a second kind, because my.harvard publishes no meeting time for any
+// of its ~1,987 NONH/MIT listings; ingest/mit_times.py fills those in from
+// MIT's own feed, so they are ordinary catalog courses you add to the plan.
+const blockState = { days: new Set() };
 const DAY_SHORT = ["Su", "M", "T", "W", "Th", "F", "S"];
 
 const hhmmToMin = (v) => {
@@ -1423,17 +1541,10 @@ const hhmmToMin = (v) => {
 };
 
 function openBlock(prefill = null) {
-  blockState.kind = "obligation";
-  blockState.courseKey = "";
   blockState.days = new Set();
   $("#bTitle").value = "";
-  $("#bCourseQ").value = "";
-  $("#bCourseResults").innerHTML = "";
-  $("#bCoursePicked").textContent = "";
   $("#bFrom").value = ""; $("#bTo").value = "";
   $("#bError").hidden = true;
-  $$("#bKind .segbtn").forEach((x) => x.classList.toggle("active", x.dataset.kind === "obligation"));
-  $("#bCourseWrap").hidden = true;
   $("#bDays").innerHTML = DAY_SHORT.map((d, i) =>
     `<label><input type="checkbox" value="${i}">${d}</label>`).join("");
   $$("#bDays input").forEach((i) => i.addEventListener("change", () => {
@@ -1460,23 +1571,6 @@ function openBlock(prefill = null) {
   $("#bTitle").focus();
 }
 
-async function searchUntimed() {
-  const q = $("#bCourseQ").value.trim();
-  const d = await get("/api/courses/untimed", { term: term(), q, limit: 20 });
-  $("#bCourseResults").innerHTML = d.results.length
-    ? d.results.map((c) =>
-        `<li data-key="${esc(c.key)}" data-code="${esc(c.code)}" data-title="${esc(c.title)}">
-          <span class="c">${esc(c.code)}</span> ${esc(c.title)}</li>`).join("")
-    : `<li style="color:var(--muted);cursor:default">No untimed listings match.</li>`;
-  $$("#bCourseResults li[data-key]").forEach((li) =>
-    li.addEventListener("click", () => {
-      blockState.courseKey = li.dataset.key;
-      $("#bTitle").value = `${li.dataset.code} ${li.dataset.title}`;
-      $("#bCoursePicked").textContent = `Linked to ${li.dataset.code} — it will count toward the outside-Harvard cap.`;
-      $("#bCourseResults").innerHTML = "";
-    }));
-}
-
 async function saveBlock() {
   const start = hhmmToMin($("#bStart").value);
   const end = hhmmToMin($("#bEnd").value);
@@ -1497,7 +1591,7 @@ async function saveBlock() {
       term: term(), title: $("#bTitle").value.trim(),
       days: Array.from(blockState.days), start_min: start, end_min: end,
       start_date: from || null, end_date: to || null,
-      category: blockState.kind, course_key: blockState.courseKey,
+      category: "obligation",
     });
     Store.addLocked(term(), d.item);
   } catch (e) {
@@ -1578,6 +1672,10 @@ $("#metaInfo").addEventListener("click", (e) => {
 $("#metaInfo").addEventListener("mouseenter", () => toggleMeta(true));
 $(".metawrap").addEventListener("mouseleave", () => { if (!metaPinned) toggleMeta(false); });
 document.addEventListener("click", () => { metaPinned = false; toggleMeta(false); });
+document.addEventListener("click", () => { auditPinned = false; closeAudits(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { auditPinned = false; closeAudits(); }
+});
 
 $("#seasonFix").addEventListener("click", applySeasonFix);
 
@@ -1628,18 +1726,6 @@ document.addEventListener("keydown", (e) => {
   toggleMeta(false);
 });
 
-$$("#bKind .segbtn").forEach((b) => b.addEventListener("click", () => {
-  blockState.kind = b.dataset.kind;
-  blockState.courseKey = "";
-  $$("#bKind .segbtn").forEach((x) => x.classList.toggle("active", x === b));
-  $("#bCourseWrap").hidden = blockState.kind !== "course";
-  $("#bCoursePicked").textContent = "";
-  if (blockState.kind === "course") searchUntimed();
-}));
-let bt;
-$("#bCourseQ").addEventListener("input", () => {
-  clearTimeout(bt); bt = setTimeout(searchUntimed, 220);
-});
 $("#pSeasBg").addEventListener("change", () => {
   $("#pAreasWrap").hidden = !$("#pSeasBg").checked;
 });

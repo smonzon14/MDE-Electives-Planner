@@ -92,6 +92,18 @@ def now_iso() -> str:
 MIGRATIONS = {
     "meetings": [
         ("date_source", "TEXT"),   # 'detail' | 'session_default' | NULL (unknown)
+        # Room, where the source publishes one. In practice that means MIT only:
+        # my.harvard gates room-level location behind HarvardKey ("Sign In to
+        # see location"), so every Harvard meeting leaves this NULL.
+        ("location", "TEXT"),
+    ],
+    "courses": [
+        # HBS MBA cross-registrant auditor rule, scraped by ingest/hbs_notes.py
+        # from the HBS catalog because my.harvard stores only a link to it.
+        # 'open' | 'limited' | 'closed' | NULL (not an HBS MBA section, or the
+        # note was missing/unparseable).
+        ("auditors", "TEXT"),
+        ("auditor_note", "TEXT"),  # the note verbatim, shown in the UI
     ],
 }
 
