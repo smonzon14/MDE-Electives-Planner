@@ -107,7 +107,7 @@ jobs:
       # One pass per term: crawl, then backfill dates, then detect cross-listings.
       # Cross-listing detection is per-term by nature (it groups courses sharing
       # an instructor and meeting time), so it cannot be hoisted out of the loop.
-      - name: Crawl, date and cross-list every term
+      - name: Crawl, date, tag and cross-list every term
         run: |
           set -euo pipefail
           TERM_LIST="${{ inputs.terms }}"
@@ -130,6 +130,14 @@ jobs:
             # detail pages. Without them, two 7-week courses in opposite halves
             # of the term look like a conflict.
             python -m ingest.dates --term "$term"
+
+            # HBS MBA sections have no course text on my.harvard -- their
+            # description is a bare link to the HBS catalog -- so the auditor
+            # rule, which decides whether an MDE student can sit in at all, is
+            # scraped from that catalog. ~90 requests, and a no-op for terms
+            # with no MBA sections posted yet.
+            python -m ingest.hbs_notes --term "$term"
+
             python -m ingest.crosslist "$term"
             echo "::endgroup::"
           done

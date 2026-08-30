@@ -93,6 +93,14 @@ MIGRATIONS = {
     "meetings": [
         ("date_source", "TEXT"),   # 'detail' | 'session_default' | NULL (unknown)
     ],
+    "courses": [
+        # HBS MBA cross-registrant auditor rule, scraped by ingest/hbs_notes.py
+        # from the HBS catalog because my.harvard stores only a link to it.
+        # 'open' | 'limited' | 'closed' | NULL (not an HBS MBA section, or the
+        # note was missing/unparseable).
+        ("auditors", "TEXT"),
+        ("auditor_note", "TEXT"),  # the note verbatim, shown in the UI
+    ],
 }
 
 

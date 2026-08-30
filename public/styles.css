@@ -315,6 +315,45 @@ a.ev-link:hover { outline: 2px solid rgba(255,255,255,.75); outline-offset: -2px
 
 /* On an MDE approved list (project-based / technical). */
 .badge.listed { background: rgba(37,99,235,.16); color: var(--preview); }
+/* ---- HBS cross-registrant auditor policy ----
+   Only HBS MBA sections carry this. Deliberately NOT green: green means "this
+   satisfies an MDE requirement" everywhere else in the app, and being able to
+   audit a course satisfies nothing. Blue is the app's "notable property of the
+   course" colour, which is exactly what this is. "Closed" stays neutral grey
+   rather than red -- it is a plain fact about the section, not a problem with
+   the student's plan, and red is reserved for clashes and dead ends. */
+.auditwrap { position: relative; display: inline-flex; align-items: center;
+             max-width: 100%; min-width: 0; }
+.badge.auditok   { background: rgba(37,99,235,.16);  color: var(--preview); }
+.badge.auditsome { background: rgba(180,120,0,.16);  color: #a06400; }
+.badge.auditno   { background: rgba(107,114,128,.16); color: var(--muted); }
+@media (prefers-color-scheme: dark) { .badge.auditsome { color: #e0a83c; } }
+
+/* The pill is a flex row so the dot centres on the label. It used to be an
+   inline-block with the dot baseline-aligned by a magic -2px, which only looked
+   right at one font size -- an inline-flex button has no reliable baseline. */
+.badge.audit { display: inline-flex; align-items: center; gap: 5px; }
+
+/* The dot rides inside the pill, so it drops the standalone version's panel
+   fill and borrows the pill's own colour instead of the neutral --muted. */
+.infodot.mini { width: 13px; height: 13px; flex: 0 0 auto;
+                border-color: currentColor; background: transparent; color: inherit;
+                font-size: 8.5px; line-height: 1; opacity: .5; cursor: help; }
+.infodot.mini:hover, .infodot.mini[aria-expanded="true"] { opacity: 1; color: inherit; }
+
+/* Prose, not the label/value rows .infopop is otherwise used for -- hence <p>
+   rather than <div>, which is what those row styles key off. */
+.auditpop { cursor: default; white-space: normal; font-weight: 400;
+            color: var(--ink); text-transform: none; letter-spacing: normal; }
+.auditpop p { margin: 0; }
+.auditpop .pop-h { font-size: 10px; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .05em; color: var(--muted); margin-bottom: 5px; }
+.auditpop .pop-b { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.auditpop .pop-src { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line);
+                     font-size: 10.5px; line-height: 1.4; color: var(--muted); }
+.auditpop a { color: var(--preview); }
+/* Mirrored when a left-aligned panel would run off the right edge. */
+.auditpop.flip { left: auto; right: 0; }
 .check .rule { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
                color: var(--muted); border: 1px solid var(--line);
                border-radius: 10px; padding: 0 5px; margin-left: 4px; }

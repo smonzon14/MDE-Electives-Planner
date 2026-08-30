@@ -545,6 +545,80 @@ function policyBadges(pol) {
     }).join("");
 }
 
+// --------------------------------------------------- HBS auditor policy ---
+//
+// my.harvard has no course text for HBS MBA sections -- their description is a
+// bare link to the HBS catalog -- so ingest/hbs_notes.py scrapes the auditor
+// rule and stores it on the course. Only HBSM sections carry it; everything
+// else renders nothing.
+//
+// Three states, not two. Ten of the 2026 Fall sections accept ONLY ALI
+// Fellows, Harvard Fellows or postdocs, and an MDE student is none of those --
+// folding them into "open" would promise access that doesn't exist.
+const AUDIT = {
+  open:    { cls: "auditok",  label: "open to auditors" },
+  limited: { cls: "auditsome", label: "auditors: fellows only" },
+  closed:  { cls: "auditno",  label: "no auditors" },
+};
+
+// The note is HBS's own prose and carries the links a student has to follow
+// (the request form, the audit-process page), so escape it and then make the
+// URLs real anchors rather than dropping them into a title="" tooltip.
+function linkify(text) {
+  return esc(text).replace(/https?:\/\/[^\s<]+/g, (u) => {
+    const trail = u.match(/[.,;:]+$/);
+    const href = trail ? u.slice(0, -trail[0].length) : u;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`
+      + (trail ? trail[0] : "");
+  });
+}
+
+const auditPopId = (key) => `audit-${String(key).replace(/[^a-zA-Z0-9]+/g, "-")}`;
+
+function auditBadge(c) {
+  const a = AUDIT[c.auditors];
+  if (!a) return "";
+  const id = auditPopId(c.key);
+  // The popover is a SIBLING of the pill, not a child: .r-badges .badge sets
+  // overflow:hidden to keep long labels on one line, which would clip it.
+  return `<span class="auditwrap">
+      <span class="badge audit ${a.cls}">${a.label}<button type="button" class="infodot mini"
+        data-auditinfo="${id}" aria-controls="${id}" aria-expanded="false"
+        aria-label="What the HBS catalog says about auditing this section">i</button></span>
+      <div class="infopop auditpop" id="${id}" role="group" hidden>
+        <p class="pop-h">Cross-registrant auditors</p>
+        <p class="pop-b">${linkify(c.auditor_note || "")}</p>
+        <p class="pop-src">From the HBS course catalog. Stated per section, so
+          another section of the same course may differ.</p>
+      </div>
+    </span>`;
+}
+
+// Pinned popovers survive the pointer leaving, so someone can select the note
+// text or click through to the HBS request form inside it.
+let auditPinned = false;
+
+/** Hover to peek, click to pin -- the same idiom as the catalog info dot. */
+function toggleAudit(btn, force) {
+  const pop = document.getElementById(btn.dataset.auditinfo);
+  if (!pop) return;
+  const open = force !== undefined ? force : pop.hidden;
+  pop.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  pop.classList.remove("flip");
+  // Pills sit anywhere across the row, so a left-aligned panel can run off the
+  // right edge. Measure once it is visible and mirror it when it does.
+  if (open && pop.getBoundingClientRect().right > window.innerWidth - 8) {
+    pop.classList.add("flip");
+  }
+}
+
+function closeAudits(root = document) {
+  root.querySelectorAll(".auditpop:not([hidden])").forEach((p) => { p.hidden = true; });
+  root.querySelectorAll('[data-auditinfo][aria-expanded="true"]')
+    .forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
 function courseCard(c, inPlan) {
   const times = c.meetings.length
     ? c.meetings.map((m) => `${m.days.map((d) => d.slice(0, 3)).join(" ")} ${fmt(m.start_min)}–${fmt(m.end_min)}`).join(" · ")
@@ -590,7 +664,7 @@ function courseCard(c, inPlan) {
           ${fit}
           <span class="badge level" title="${esc(pol.level_label || "")}">${
             esc(pol.level_short || pol.level_label || "")}</span>
-          ${policyBadges(pol)}${lists}${extra}
+          ${policyBadges(pol)}${lists}${extra}${auditBadge(c)}
         </div>
         <div class="r-actions">
           ${c.enrolled ? `<span class="badge req">enrolled</span>`
@@ -648,6 +722,21 @@ function wireCards(sel, source) {
     e.stopPropagation();
     await togglePlan(b.dataset.plan, b);
   }));
+  // stopPropagation throughout: the whole row is clickable, and the document
+  // handler below closes every popover on any other click.
+  $$(`${sel} [data-auditinfo]`).forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasOpen = b.getAttribute("aria-expanded") === "true";
+      closeAudits();
+      toggleAudit(b, !wasOpen);
+      auditPinned = !wasOpen;
+    });
+    b.addEventListener("mouseenter", () => { if (!auditPinned) toggleAudit(b, true); });
+  });
+  $$(`${sel} .auditwrap`).forEach((w) => {
+    w.addEventListener("mouseleave", () => { if (!auditPinned) closeAudits(w); });
+  });
 }
 
 // ------------------------------------------------------------------ plan ---
@@ -1578,6 +1667,10 @@ $("#metaInfo").addEventListener("click", (e) => {
 $("#metaInfo").addEventListener("mouseenter", () => toggleMeta(true));
 $(".metawrap").addEventListener("mouseleave", () => { if (!metaPinned) toggleMeta(false); });
 document.addEventListener("click", () => { metaPinned = false; toggleMeta(false); });
+document.addEventListener("click", () => { auditPinned = false; closeAudits(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { auditPinned = false; closeAudits(); }
+});
 
 $("#seasonFix").addEventListener("click", applySeasonFix);
 

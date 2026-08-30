@@ -86,11 +86,12 @@ safe and idempotent: it upserts, and logs every meeting-time change into the
 **Nothing gates which terms are searchable.** The app's term dropdown is built
 from `SELECT term, COUNT(*) FROM courses GROUP BY term`, and every endpoint takes
 a `term`, so a term becomes selectable the moment it has been ingested. To add
-one, run the three ingest steps against it:
+one, run the ingest steps against it:
 
 ```bash
 ./.venv/bin/python -m ingest.crawl     --term "2027 Spring"
 ./.venv/bin/python -m ingest.dates     --term "2027 Spring"
+./.venv/bin/python -m ingest.hbs_notes --term "2027 Spring"
 ./.venv/bin/python -m ingest.crosslist "2027 Spring"
 ./.venv/bin/python -m ingest.seal --in-place        # before deploying
 ```
@@ -295,6 +296,45 @@ Conflict detection requires day **and** time **and** date overlap. An unknown
 date range is treated as always-running, so the engine can over-report a
 conflict but never hide one.
 
+### Can you actually audit that HBS course?
+
+my.harvard carries no course text for HBS MBA sections. Their `description` is
+literally a link to the HBS catalog:
+
+```
+https://coursecatalog.mba.hbs.edu/?details&srcdb=792148&code=CATS%201120
+```
+
+So the rule that decides whether an MDE student can sit in on an HBS course at
+all was invisible to the app. `ingest/hbs_notes.py` reads it from that catalog's
+public JSON API (`?page=fose&route=details`), whose `class_notes` field always
+carries a **Cross-Registrant Auditors** entry, and stores it on the course as
+`auditors` + `auditor_note`:
+
+| `auditors` | 2026 Fall | Pill |
+|---|---:|---|
+| `closed` | 61 | `no auditors` |
+| `open` | 19 | `open to auditors` |
+| `limited` | 10 | `auditors: fellows only` |
+
+**`limited` is not a nicety.** Ten sections accept only ALI Fellows, Harvard
+Fellows or postdocs, and an MDE student is none of those — folding them into
+"open" would promise access that does not exist.
+
+Two details the wording has to respect: the note is written **per section**, so
+two sections of the same course can differ (HBSMBA 1130 §01 and §02 both say
+Harvard Fellows, but nothing guarantees that), and "open" still means faculty
+approval plus a course fee. The pill is therefore a pointer, not a verdict — the
+info dot shows HBS's exact wording with its links live.
+
+The term's `srcdb` is read out of the stored links rather than hardcoded, so a
+newly posted term needs no code change. A term with no MBA sections yet is a
+no-op.
+
+```bash
+./.venv/bin/python -m ingest.hbs_notes --term "2026 Fall"
+```
+
 ## 6. Custom blocks (obligations and MIT courses)
 
 **+ Block** in the sidebar adds a commitment my.harvard doesn't know about. Two kinds:
@@ -480,6 +520,7 @@ ingest/parse.py         HTML card -> structured course
 ingest/crawl.py         paginated catalog crawler
 ingest/crosslist.py     cross-listing detection
 ingest/dates.py         meeting date-range backfill (partial terms)
+ingest/hbs_notes.py     HBS MBA cross-registrant auditor policy
 ingest/approved.py      parses the two .xlsx lists -> approved_lists.yaml
 ingest/db.py            SQLite schema, upsert, change log, read-only open
 ingest/seal.py          makes a deploy-ready read-only DB artifact
