@@ -145,14 +145,22 @@ jobs:
             # rule, which decides whether an MDE student can sit in at all, is
             # scraped from that catalog. ~90 requests, and a no-op for terms
             # with no MBA sections posted yet.
-            python -m ingest.hbs_notes --term "$term"
+            # `|| warning`, deliberately. These two enrich a catalog that is
+            # already complete and valid without them, and they depend on THIRD-
+            # PARTY services. A transient timeout from one of them used to abort
+            # the step under `set -e` and throw away a finished ten-minute crawl,
+            # publishing nothing at all. A missing pill is worth far less than a
+            # stale catalog, so the run continues and the annotation says so.
+            python -m ingest.hbs_notes --term "$term" \
+              || echo "::warning::hbs_notes failed for $term -- shipping without HBS auditor tags."
 
             # my.harvard publishes NO meeting time for any of its ~1,987
             # NONH/MIT cross-registration listings. MIT serves its whole term
             # as one JSON document, so this is a SINGLE request that times
             # ~1,200 of them. It only ever fills in times on courses
             # my.harvard already lists; MIT-only classes are ignored.
-            python -m ingest.mit_times --term "$term"
+            python -m ingest.mit_times --term "$term" \
+              || echo "::warning::mit_times failed for $term -- shipping without MIT times/rooms."
 
             python -m ingest.crosslist "$term"
             echo "::endgroup::"

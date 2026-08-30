@@ -34,11 +34,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import DAY_NAMES, DEFAULT_TERM, REQUEST_TIMEOUT_SEC, USER_AGENT
+from config import (
+    DAY_NAMES, DEFAULT_TERM, MAX_RETRIES, REQUEST_DELAY_SEC, REQUEST_TIMEOUT_SEC,
+    USER_AGENT,
+)
 from ingest.db import connect
 from ingest.parse import minutes_to_label
 
@@ -52,9 +56,23 @@ SEASONS = {"f": "Fall", "s": "Spring"}   # i (IAP) and m (summer) have no Harvar
 
 
 def fetch(url: str = FEED_URL) -> dict:
+    """One request, so retry it -- there is no partial progress to fall back on.
+
+    A single transient timeout here once failed the whole refresh and discarded
+    a completed ten-minute crawl, because this was the only ingest module
+    without the retry every sibling has.
+    """
     req = urllib.request.Request(url, headers={"user-agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SEC) as r:
-        return json.load(r)
+    last_err = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SEC) as r:
+                return json.load(r)
+        except Exception as e:  # noqa: BLE001 - retry any transport/parse failure
+            last_err = e
+            if attempt < MAX_RETRIES:
+                time.sleep(REQUEST_DELAY_SEC * 2 * attempt)
+    raise RuntimeError(f"{url} failed after {MAX_RETRIES} attempts: {last_err}")
 
 
 def feed_term(url_name: str) -> str | None:
