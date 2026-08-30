@@ -53,6 +53,20 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 // my.harvard stores detail_url as "/course/COMPSCI2360R/2026-Fall/001".
 const MYHARVARD = "https://my.harvard.edu";
 const courseUrl = (c) => (c && c.detail_url) ? MYHARVARD + c.detail_url : null;
+
+// my.harvard's card badge splits a code into subject + catalog, and MIT's
+// dot-numbering defeats it: "MIT 1.000" is stored as subject "MIT", catalog "1",
+// so every one of the ~1,987 NONH listings renders as "MIT 1" / "MIT 6" and
+// they are indistinguishable from each other. `code` is always intact, so where
+// the two halves don't reconstruct it, split `code` instead. Every other school
+// satisfies subject+catalog===code exactly, so nothing else changes.
+const codeLabel = (c) => {
+  const subject = c.subject || "", catalog = c.catalog || "", code = c.code || "";
+  if (subject + catalog === code) return `${subject} ${catalog}`;
+  return subject && code.startsWith(subject)
+    ? `${subject} ${code.slice(subject.length)}` : (code || `${subject} ${catalog}`);
+};
+
 const extLink = (c, label, cls = "") => {
   const u = courseUrl(c);
   return u
@@ -653,7 +667,7 @@ function courseCard(c, inPlan) {
   return `
     <li data-key="${esc(c.key)}" class="${
       !clashes.length && planClashes.length ? "has-plan-clash" : ""}">
-      <div class="r-head">${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")}
+      <div class="r-head">${extLink(c, esc(codeLabel(c)), "r-code")}
         ${extLink(c, esc(c.title), "r-title")}</div>
       <div class="r-meta">
         ${esc(times)} · ${esc(c.school || "—")} · ${esc(c.session || "")}
@@ -921,7 +935,7 @@ function gridItems() {
     // plan candidates would paint purple over the crimson and misrepresent them.
     if (c.enrolled) return;
     items.push({
-      kind: "pinned", label: `${c.subject} ${c.catalog}`, url: courseUrl(c),
+      kind: "pinned", label: codeLabel(c), url: courseUrl(c),
       removeAttr: `data-rm-plan="${esc(c.key)}"`, meetings: c.meetings, detail: "",
     });
   });
@@ -1076,7 +1090,7 @@ function renderGrid() {
   // blue would paint over it and misrepresent it.
   for (const pv of state.preview) {
     if (!pv || state.plan.has(pv.key)) continue;
-    draw({ label: `${pv.subject} ${pv.catalog}`, url: courseUrl(pv),
+    draw({ label: codeLabel(pv), url: courseUrl(pv),
            meetings: pv.meetings, removeAttr: "", detail: "" }, "ev-preview");
   }
 
@@ -1224,7 +1238,7 @@ function renderCombos() {
         </div>
         ${combo.map((c, si) => `<div class="row">
           <span class="slotno">${si + 1}</span>
-          ${extLink(c, `${esc(c.subject)} ${esc(c.catalog)}`, "r-code")} ${extLink(c, esc(c.title))}
+          ${extLink(c, esc(codeLabel(c)), "r-code")} ${extLink(c, esc(c.title))}
           <span style="color:var(--muted)"> — ${c.meetings.map((m) =>
             m.days.map((x) => x.slice(0, 3)).join(" ") + " " +
             fmt(m.start_min) + "–" + fmt(m.end_min)).join(" · ")}</span>
@@ -1503,7 +1517,11 @@ function importData(file) {
 
 // ----------------------------------------------------------- block editor ---
 
-const blockState = { kind: "obligation", courseKey: "", days: new Set() };
+// Blocks are obligations only now. MIT cross-registrations used to be entered
+// here as a second kind, because my.harvard publishes no meeting time for any
+// of its ~1,987 NONH/MIT listings; ingest/mit_times.py fills those in from
+// MIT's own feed, so they are ordinary catalog courses you add to the plan.
+const blockState = { days: new Set() };
 const DAY_SHORT = ["Su", "M", "T", "W", "Th", "F", "S"];
 
 const hhmmToMin = (v) => {
@@ -1512,17 +1530,10 @@ const hhmmToMin = (v) => {
 };
 
 function openBlock(prefill = null) {
-  blockState.kind = "obligation";
-  blockState.courseKey = "";
   blockState.days = new Set();
   $("#bTitle").value = "";
-  $("#bCourseQ").value = "";
-  $("#bCourseResults").innerHTML = "";
-  $("#bCoursePicked").textContent = "";
   $("#bFrom").value = ""; $("#bTo").value = "";
   $("#bError").hidden = true;
-  $$("#bKind .segbtn").forEach((x) => x.classList.toggle("active", x.dataset.kind === "obligation"));
-  $("#bCourseWrap").hidden = true;
   $("#bDays").innerHTML = DAY_SHORT.map((d, i) =>
     `<label><input type="checkbox" value="${i}">${d}</label>`).join("");
   $$("#bDays input").forEach((i) => i.addEventListener("change", () => {
@@ -1549,23 +1560,6 @@ function openBlock(prefill = null) {
   $("#bTitle").focus();
 }
 
-async function searchUntimed() {
-  const q = $("#bCourseQ").value.trim();
-  const d = await get("/api/courses/untimed", { term: term(), q, limit: 20 });
-  $("#bCourseResults").innerHTML = d.results.length
-    ? d.results.map((c) =>
-        `<li data-key="${esc(c.key)}" data-code="${esc(c.code)}" data-title="${esc(c.title)}">
-          <span class="c">${esc(c.code)}</span> ${esc(c.title)}</li>`).join("")
-    : `<li style="color:var(--muted);cursor:default">No untimed listings match.</li>`;
-  $$("#bCourseResults li[data-key]").forEach((li) =>
-    li.addEventListener("click", () => {
-      blockState.courseKey = li.dataset.key;
-      $("#bTitle").value = `${li.dataset.code} ${li.dataset.title}`;
-      $("#bCoursePicked").textContent = `Linked to ${li.dataset.code} — it will count toward the outside-Harvard cap.`;
-      $("#bCourseResults").innerHTML = "";
-    }));
-}
-
 async function saveBlock() {
   const start = hhmmToMin($("#bStart").value);
   const end = hhmmToMin($("#bEnd").value);
@@ -1586,7 +1580,7 @@ async function saveBlock() {
       term: term(), title: $("#bTitle").value.trim(),
       days: Array.from(blockState.days), start_min: start, end_min: end,
       start_date: from || null, end_date: to || null,
-      category: blockState.kind, course_key: blockState.courseKey,
+      category: "obligation",
     });
     Store.addLocked(term(), d.item);
   } catch (e) {
@@ -1721,18 +1715,6 @@ document.addEventListener("keydown", (e) => {
   toggleMeta(false);
 });
 
-$$("#bKind .segbtn").forEach((b) => b.addEventListener("click", () => {
-  blockState.kind = b.dataset.kind;
-  blockState.courseKey = "";
-  $$("#bKind .segbtn").forEach((x) => x.classList.toggle("active", x === b));
-  $("#bCourseWrap").hidden = blockState.kind !== "course";
-  $("#bCoursePicked").textContent = "";
-  if (blockState.kind === "course") searchUntimed();
-}));
-let bt;
-$("#bCourseQ").addEventListener("input", () => {
-  clearTimeout(bt); bt = setTimeout(searchUntimed, 220);
-});
 $("#pSeasBg").addEventListener("change", () => {
   $("#pAreasWrap").hidden = !$("#pSeasBg").checked;
 });

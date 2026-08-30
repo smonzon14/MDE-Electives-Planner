@@ -138,6 +138,13 @@ jobs:
             # with no MBA sections posted yet.
             python -m ingest.hbs_notes --term "$term"
 
+            # my.harvard publishes NO meeting time for any of its ~1,987
+            # NONH/MIT cross-registration listings. MIT serves its whole term
+            # as one JSON document, so this is a SINGLE request that times
+            # ~1,200 of them. It only ever fills in times on courses
+            # my.harvard already lists; MIT-only classes are ignored.
+            python -m ingest.mit_times --term "$term"
+
             python -m ingest.crosslist "$term"
             echo "::endgroup::"
           done

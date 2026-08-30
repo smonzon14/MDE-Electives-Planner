@@ -281,17 +281,6 @@ h3.sec { font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
          color: var(--muted); margin: 16px 0 8px; }
 
 /* ---- custom block editor ---- */
-.seg { display: flex; gap: 6px; margin: 4px 0 12px; }
-.segbtn { flex: 1; padding: 6px 8px; font-size: 12px; font-weight: 600;
-          border: 1px solid var(--line); border-radius: 7px;
-          background: transparent; color: var(--muted); }
-.segbtn.active { background: var(--crimson); border-color: var(--crimson); color: #fff; }
-.picklist { list-style: none; margin: 0 0 8px; padding: 0;
-            max-height: 150px; overflow-y: auto; }
-.picklist li { font-size: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
-               border: 1px solid transparent; }
-.picklist li:hover { border-color: var(--preview); }
-.picklist .c { font-weight: 700; color: var(--crimson); }
 .berr { font-size: 12px; color: var(--bad); margin-top: 8px; }
 .locked-list li.custom { background: rgba(124,58,237,.12); }
 .locked-list .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
@@ -315,6 +304,7 @@ a.ev-link:hover { outline: 2px solid rgba(255,255,255,.75); outline-offset: -2px
 
 /* On an MDE approved list (project-based / technical). */
 .badge.listed { background: rgba(37,99,235,.16); color: var(--preview); }
+
 /* ---- HBS cross-registrant auditor policy ----
    Only HBS MBA sections carry this. Deliberately NOT green: green means "this
    satisfies an MDE requirement" everywhere else in the app, and being able to

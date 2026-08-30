@@ -92,6 +92,7 @@ one, run the ingest steps against it:
 ./.venv/bin/python -m ingest.crawl     --term "2027 Spring"
 ./.venv/bin/python -m ingest.dates     --term "2027 Spring"
 ./.venv/bin/python -m ingest.hbs_notes --term "2027 Spring"
+./.venv/bin/python -m ingest.mit_times --term "2027 Spring"
 ./.venv/bin/python -m ingest.crosslist "2027 Spring"
 ./.venv/bin/python -m ingest.seal --in-place        # before deploying
 ```
@@ -335,28 +336,82 @@ no-op.
 ./.venv/bin/python -m ingest.hbs_notes --term "2026 Fall"
 ```
 
-## 6. Custom blocks (obligations and MIT courses)
+## 6. MIT cross-registration, and custom blocks
 
-**+ Block** in the sidebar adds a commitment my.harvard doesn't know about. Two kinds:
+### MIT courses come from MIT's own feed
 
-**Obligation** — club meetings, work, commute, anything that occupies a slot.
-It becomes a locked block and filters the catalog like any enrolled course.
+my.harvard lists **1,987 MIT courses** under `school=NONH` (subject `MIT`) and
+publishes a meeting time for **not one of them**. Scheduling around an MIT
+cross-registration used to mean retyping its time by hand as a custom block.
 
-**Outside course (MIT)** — my.harvard lists **1,987 MIT courses** under
-`school=NONH` (subject `MIT`) and **not one of them has a meeting time**. So the
-only way to schedule around a cross-registration course is to enter its time by
-hand. The editor searches those untimed listings, and linking one makes the
-policy engine count it toward the rule-5 outside-Harvard cap automatically.
+MIT publishes the whole term as a single JSON document — Hydrant, the
+student-built planner, serves `latest.json` with every class and its meeting
+slots. So `ingest/mit_times.py` is **one HTTP request for the entire catalog**,
+not one per course: seconds, against the ~10 minutes the my.harvard crawl takes.
 
-Both accept an optional date range, so a half-term commitment stops conflicting
-with courses in the other half.
+```bash
+./.venv/bin/python -m ingest.mit_times --term "2026 Fall"
+```
+
+**It can only ever add a time to a course my.harvard already lists.** The pass
+iterates over the `NONH`/`MIT` rows in our catalog and looks each one up in the
+feed; Hydrant carries ~2,277 classes, so the ~315 that Harvard does not list are
+ignored. If Harvard doesn't list it, you can't register for it, so it has no
+business appearing here.
+
+| | 2026 Fall |
+|---|---:|
+| my.harvard MIT listings | 1,987 |
+| matched in the MIT feed | 1,962 |
+| **given real meeting times** | **1,232** |
+| no single lecture pattern | 730 |
+| not in the MIT feed | 25 |
+
+**Slot encoding** (verified against Hydrant's own `lectureRawSections` text for
+1,518 classes, zero mismatches):
+
+```
+slot = day * 34 + half_hours_since_06:00        day 0 = Monday
+44 -> Tuesday 11:00      [44, 3] -> Tuesday 11:00-12:30
+```
+
+**Only unambiguous times are stored.** A third of MIT classes publish either no
+lecture section or several *alternative* ones (6.1010 offers four lecture times
+in one room). Writing every alternative into `meetings` would make the course
+collide with everything and read as unschedulable, so a class is timed only when
+its lecture sections agree on one pattern. The other 730 stay untimed — exactly
+where they were before — so this can only add information, never distort it.
+
+MIT also publishes half-term flags, so `1.010A` (Sep 9 – Oct 23) stops
+conflicting with `1.010B` (Oct 26 – Dec 10) the same way `ingest/dates.py` fixes
+that for Harvard. Meetings from this source are tagged `date_source='mit_feed'`.
+
+**A display fix came with this.** my.harvard's search-card badge splits a code
+into subject + catalog, and MIT's dot-numbering defeats it: `MIT 1.000` is stored
+as subject `MIT`, catalog `1`. Every NONH listing therefore rendered as "MIT 1"
+or "MIT 6", which nobody noticed while they were all untimed and hidden behind
+the TBA filter — and became glaring the moment 1,232 of them appeared in default
+results. `codeLabel()` in `public/app.js` falls back to splitting `code` whenever
+`subject + catalog !== code`. That condition holds for **0 of 1,987** NONH rows
+and for **every** row of every other school, so nothing else changed.
 
 > **MIT numbering is not a level.** `1.000` parses as level 1, which the FAS
 > guide would read as a sub-100 course and rule 3 would discard. NONH is
 > therefore excluded from the FAS level bands entirely. Rule 5 still requires
 > graduate standing, so outside courses always report **"verify"** — you confirm
-> the level yourself. When MIT API access comes through, real meeting times can
-> be ingested into `meetings` and these manual blocks become unnecessary.
+> the level yourself.
+
+### Custom blocks
+
+**+ Block** in the sidebar adds a commitment my.harvard doesn't know about —
+club meetings, work, commute. It becomes a locked block and filters the catalog
+like any enrolled course, and it accepts an optional date range so a half-term
+commitment stops conflicting with courses in the other half.
+
+Blocks used to have a second kind, "Outside course (MIT)", which linked a block
+to an untimed NONH listing. Real MIT times made it redundant and it is gone,
+along with the `/api/courses/untimed` endpoint that fed its picker. Blocks
+already saved with a course link keep working.
 
 ## Links back to my.harvard
 
@@ -407,7 +462,6 @@ manually from the Actions tab with `max_pages: 5` for a smoke test.
 | `POST /api/course/{key}` | One course, evaluated against a profile |
 | `POST /api/free` | Open windows per day |
 | `GET /api/changes` | Course times that moved since last ingest |
-| `GET /api/courses/untimed` | Catalog listings with no meeting time (defaults to NONH/MIT) |
 | `POST /api/policy/reload` | Re-read the policy and approved lists (local dev) |
 
 **Every endpoint is stateless.** The ones that depend on the student take
@@ -521,6 +575,7 @@ ingest/crawl.py         paginated catalog crawler
 ingest/crosslist.py     cross-listing detection
 ingest/dates.py         meeting date-range backfill (partial terms)
 ingest/hbs_notes.py     HBS MBA cross-registrant auditor policy
+ingest/mit_times.py     MIT meeting times from MIT's own feed
 ingest/approved.py      parses the two .xlsx lists -> approved_lists.yaml
 ingest/db.py            SQLite schema, upsert, change log, read-only open
 ingest/seal.py          makes a deploy-ready read-only DB artifact

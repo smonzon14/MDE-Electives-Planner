@@ -461,40 +461,6 @@ def recent_changes(term: str = DEFAULT_TERM, limit: int = Query(100, ge=1, le=50
     return {"changes": [dict(r) for r in rows]}
 
 
-@app.get("/api/courses/untimed")
-def untimed_courses(term: str = DEFAULT_TERM, q: str = "", school: str = "NONH",
-                    limit: int = Query(30, ge=1, le=100)):
-    """Catalog courses with no meeting time -- the ones needing a manual block.
-
-    Defaults to NONH (MIT cross-registration), which is ~2,000 listings with no
-    times at all until an MIT feed exists.
-    """
-    conn = db()
-    sql = ["""SELECT c.* FROM courses c
-              LEFT JOIN meetings m ON m.course_key = c.key
-              WHERE c.term = ? AND m.id IS NULL"""]
-    params: list = [term]
-    if school:
-        sql.append("AND c.school = ?")
-        params.append(school)
-    if q:
-        clause = "c.code LIKE ? OR c.title LIKE ?"
-        params += [f"%{q}%", f"%{q}%"]
-        stripped = "".join(ch for ch in q.upper() if ch not in _CODE_PUNCT)
-        if stripped:
-            clause += f" OR {_norm_code_sql('c.code')} LIKE ?"
-            params.append(f"%{stripped}%")
-        sql.append(f"AND ({clause})")
-    sql.append("ORDER BY c.code LIMIT ?")
-    params.append(limit)
-    rows = conn.execute(" ".join(sql), params).fetchall()
-    conn.close()
-    return {"results": [
-        {"key": r["key"], "code": r["code"], "title": r["title"],
-         "school": r["school"], "subject": r["subject"],
-         "detail_url": r["detail_url"]} for r in rows]}
-
-
 # --------------------------------------------------------------- extension ---
 
 EXTENSION_DIR = ROOT / "extension"
