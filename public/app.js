@@ -50,7 +50,7 @@ const fmt = (m) => {
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-// my.harvard stores detail_url as "/course/COMPSCI2360R/2026-Fall/001".
+// my.harvard stores detail_url as "/course/COMPSCI2360R/2026-Fall/Full-Term/001".
 const MYHARVARD = "https://my.harvard.edu";
 const courseUrl = (c) => (c && c.detail_url) ? MYHARVARD + c.detail_url : null;
 
@@ -1551,7 +1551,7 @@ function importData(file) {
 // Blocks are obligations only now. MIT cross-registrations used to be entered
 // here as a second kind, because my.harvard publishes no meeting time for any
 // of its ~1,987 NONH/MIT listings; ingest/mit_times.py fills those in from
-// MIT's own feed, so they are ordinary catalog courses you add to the plan.
+// the MIT Registrar's listing, so they are ordinary catalog courses you add to the plan.
 const blockState = { days: new Set() };
 const DAY_SHORT = ["Su", "M", "T", "W", "Th", "F", "S"];
 

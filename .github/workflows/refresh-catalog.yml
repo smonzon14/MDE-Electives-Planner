@@ -154,11 +154,12 @@ jobs:
             python -m ingest.hbs_notes --term "$term" \
               || echo "::warning::hbs_notes failed for $term -- shipping without HBS auditor tags."
 
-            # my.harvard publishes NO meeting time for any of its ~1,987
-            # NONH/MIT cross-registration listings. MIT serves its whole term
-            # as one JSON document, so this is a SINGLE request that times
+            # my.harvard publishes NO meeting time for any of its ~2,000
+            # NONH/MIT cross-registration listings. The MIT Registrar's subject
+            # listing (student.mit.edu/catalog, ~94 pages, ~1.5 min) times
             # ~1,200 of them. It only ever fills in times on courses
-            # my.harvard already lists; MIT-only classes are ignored.
+            # my.harvard already lists; MIT-only classes are ignored, and a
+            # term with no MIT listings yet is skipped without fetching.
             python -m ingest.mit_times --term "$term" \
               || echo "::warning::mit_times failed for $term -- shipping without MIT times/rooms."
 

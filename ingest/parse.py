@@ -30,7 +30,14 @@ TIME_RANGE_RE = re.compile(
     r"(\d{1,2}):(\d{2})\s*(am|pm)\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)", re.I
 )
 SELECTED_DAY_RE = re.compile(r'aria-label="(\w+), selected"')
-DETAIL_URL_RE = re.compile(r"^/course/([^/]+)/([^/]+)/([^/]+)$")
+# /course/{code}/{term}/{session}/{section}, e.g. /course/CHEM10/2026-Fall/Full-Term/LEC.
+# my.harvard inserted the session segment in early September 2026; before that it
+# was /course/{code}/{term}/{section}. The old three-segment pattern matched no
+# card at all afterwards, so every crawl parsed 0 cards and reported success
+# while the catalog sat frozen. Both shapes are accepted: the section is always
+# the LAST segment, and the session segment is not used -- `session` still comes
+# from the card text, which is what ingest/dates.py keys off.
+DETAIL_URL_RE = re.compile(r"^/course/([^/]+)/([^/]+)/(?:[^/]+/)?([^/]+)$")
 
 
 @dataclass
