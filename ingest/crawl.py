@@ -91,6 +91,16 @@ def crawl(term: str = DEFAULT_TERM, max_pages: int | None = None,
             data = first if page == 1 else fetch_page(session, term, page, query)
             courses = parse_hits(data["hits"])
             if not courses:
+                if page == 1 and total_hits:
+                    # my.harvard says there are courses and we could read none
+                    # of them: the card markup changed under the parser. This
+                    # must be an ERROR. It used to "stop early" with status ok,
+                    # and from 2026-09-04 every refresh parsed 0 cards, reported
+                    # success, and re-shipped a frozen catalog for twelve weeks.
+                    raise RuntimeError(
+                        f"page 1 claims {total_hits} hits but no course card could be "
+                        f"parsed -- my.harvard's card markup has probably changed "
+                        f"(see ingest/parse.py)")
                 print(f"  page {page}: 0 cards -- stopping early")
                 break
             stats = upsert_courses(conn, courses)
@@ -167,7 +177,13 @@ def main() -> None:
             print(f"{value:20} {count:>6}")
         return
 
-    crawl(args.term, args.max_pages, args.query, args.delay)
+    result = crawl(args.term, args.max_pages, args.query, args.delay)
+    # Nothing read from a term that has courses: exit non-zero so the refresh
+    # workflow fails visibly instead of re-publishing the seeded catalog as if
+    # it were fresh. A failure partway through still exits 0 -- the pages it
+    # did read are committed and worth shipping.
+    if result["total_hits"] and not result["cards"]:
+        sys.exit(f"crawl failed: {result['status']}")
 
 
 if __name__ == "__main__":

@@ -338,57 +338,79 @@ no-op.
 
 ## 6. MIT cross-registration, and custom blocks
 
-### MIT courses come from MIT's own feed
+### MIT courses come from MIT's own Registrar
 
-my.harvard lists **1,987 MIT courses** under `school=NONH` (subject `MIT`) and
+my.harvard lists **~2,000 MIT courses** under `school=NONH` (subject `MIT`) and
 publishes a meeting time for **not one of them**. Scheduling around an MIT
 cross-registration used to mean retyping its time by hand as a custom block.
 
-MIT publishes the whole term as a single JSON document — Hydrant, the
-student-built planner, serves `latest.json` with every class and its meeting
-slots. So `ingest/mit_times.py` is **one HTTP request for the entire catalog**,
-not one per course: seconds, against the ~10 minutes the my.harvard crawl takes.
+`ingest/mit_times.py` reads the times from the MIT Registrar's **Subject Listing
+& Schedule** (<https://student.mit.edu/catalog/index.cgi>). The Registrar serves
+the upcoming term at the catalog root as soon as it is published — IAP/Spring
+2027 went up in November — and keeps the previous fall and spring under
+`archive/`. The pass picks whichever listing's title names the requested term,
+so both terms the site offers are covered. It walks the ~94 department pages
+(about a minute and a half at the crawl's polite delay), and term start/end dates
+come from the Registrar's academic calendar feed.
 
 ```bash
 ./.venv/bin/python -m ingest.mit_times --term "2026 Fall"
 ```
 
+> **Why not Hydrant any more.** This pass used to read Hydrant's `latest.json`,
+> the student-run planner's one-file export. It only ever carried MIT's
+> *current* term, so the term students were planning never got times until it
+> had started; and Hydrant's TLS certificate expired on 2026-11-18, failing every
+> refresh after. The Registrar is the primary source Hydrant itself scrapes.
+>
+> `student.mit.edu` prefers a Diffie-Hellman suite whose key OpenSSL 3 rejects
+> (`DH_KEY_TOO_SMALL`). It also offers ECDHE, so the pass restricts its own TLS
+> context to `ECDHE+AESGCM` — a stricter cipher list, with certificate
+> verification unchanged.
+
 **It can only ever add a time to a course my.harvard already lists.** The pass
 iterates over the `NONH`/`MIT` rows in our catalog and looks each one up in the
-feed; Hydrant carries ~2,277 classes, so the ~315 that Harvard does not list are
-ignored. If Harvard doesn't list it, you can't register for it, so it has no
-business appearing here.
+listing; MIT subjects Harvard does not list are ignored. If Harvard doesn't list
+it, you can't register for it, so it has no business appearing here. A term with
+no MIT rows yet (my.harvard posts spring cross-registration listings well after
+MIT publishes its schedule) is skipped before anything is fetched.
 
 | | 2026 Fall |
 |---|---:|
-| my.harvard MIT listings | 1,987 |
-| matched in the MIT feed | 1,962 |
-| **given real meeting times** | **1,232** |
-| no single lecture pattern | 730 |
-| not in the MIT feed | 25 |
+| my.harvard MIT listings | 1,995 |
+| found in the Registrar listing | 1,977 |
+| **given real meeting times** | **1,204** |
+| no single lecture pattern | 773 |
+| not in the Registrar listing | 18 |
 
-**Slot encoding** (verified against Hydrant's own `lectureRawSections` text for
-1,518 classes, zero mismatches):
+**Schedule notation** (verified against Hydrant's times for every 2026 Fall
+listing both sources timed: identical day and time for all of them):
 
 ```
-slot = day * 34 + half_hours_since_06:00        day 0 = Monday
-44 -> Tuesday 11:00      [44, 3] -> Tuesday 11:00-12:30
+<b>Lecture:</b> <i>TR11,F2</i> (2-135) or <i>MW9.30-11</i> (4-163)
 ```
+
+`or` separates *alternative* sections; commas join the meetings of *one*
+section. A bare hour is one hour (`MWF10` = 10–11). Daytime hours 8–12 are
+AM/noon and 1–7 PM (`9-5` = 9am–5pm); `EVE (6-9 PM)` is explicit. Blocks behind
+the "Pre-register for IAP" button are January offerings and are never attached
+to the spring term.
 
 **Only unambiguous times are stored.** A third of MIT classes publish either no
-lecture section or several *alternative* ones (6.1010 offers four lecture times
-in one room). Writing every alternative into `meetings` would make the course
-collide with everything and read as unschedulable, so a class is timed only when
-its lecture sections agree on one pattern. The other 730 stay untimed — exactly
-where they were before — so this can only add information, never distort it.
+lecture time, a TBA, or several *alternative* ones (6.1010 offers five lecture
+times). Writing every alternative into `meetings` would make the course collide
+with everything and read as unschedulable, so a class is timed only when its
+lecture sections agree on one pattern. The rest stay untimed — exactly where
+they were before — so this can only add information, never distort it.
 
-MIT also publishes half-term flags, so `1.010A` (Sep 9 – Oct 23) stops
-conflicting with `1.010B` (Oct 26 – Dec 10) the same way `ingest/dates.py` fixes
-that for Harvard. Meetings from this source are tagged `date_source='mit_feed'`.
+Half-term subjects say so in the listing ("Ends Oct 23.", "Begins Oct 26.", or a
+meeting's own "(BEGINS APR 8)"), so `1.010A` (Sep 9 – Oct 23) stops conflicting
+with `1.010B` (Oct 26 – Dec 10) the same way `ingest/dates.py` fixes that for
+Harvard. Meetings from this source are tagged `date_source='mit_feed'`.
 
 ### Rooms: MIT only, and not by choice
 
-The same feed carries the room, so **1,227 of the 1,232 timed MIT courses** get
+The same listing carries the room, so **1,203 of the 1,204 timed MIT courses** get
 one (`5-234`, `E51-315`, `W41-1401` — MIT numbers its buildings). It costs
 nothing: it arrives in the request already being made, and was simply being
 discarded. It shows next to the meeting time on the course card and in the
@@ -615,9 +637,10 @@ and are excluded from combination search so they don't flood the results.
   phase-1 trade for having no accounts; see [DEPLOY.md](DEPLOY.md).
 - **Three courses have no parseable date range** (of 2,341). They are treated as
   always-running, so they can over-report a conflict but never hide one.
-- **MIT/NONH courses have no meeting times at all** in my.harvard (1,987 of them).
-  Add them as custom blocks until an MIT feed exists. Their graduate standing
-  cannot be inferred from the course number, so rule 5 is always "verify".
+- **MIT/NONH courses have no meeting times** in my.harvard; about 60% get them
+  from the MIT Registrar (see section 6). The rest publish TBA or alternative
+  lecture times and stay untimed. Their graduate standing cannot be inferred
+  from the course number, so rule 5 is always "verify".
 - **Enrollment is deliberately out of scope.** This tool tells you what fits;
   you enroll in my.harvard yourself.
 
@@ -632,7 +655,7 @@ ingest/crawl.py         paginated catalog crawler
 ingest/crosslist.py     cross-listing detection
 ingest/dates.py         meeting date-range backfill (partial terms)
 ingest/hbs_notes.py     HBS MBA cross-registrant auditor policy
-ingest/mit_times.py     MIT meeting times from MIT's own feed
+ingest/mit_times.py     MIT meeting times from the MIT Registrar's listing
 ingest/approved.py      parses the two .xlsx lists -> approved_lists.yaml
 ingest/db.py            SQLite schema, upsert, change log, read-only open
 ingest/seal.py          makes a deploy-ready read-only DB artifact
